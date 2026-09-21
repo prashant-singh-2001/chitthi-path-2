@@ -1,0 +1,23 @@
+sarvam:
+  base-url: http://localhost:8888
+  api-subscription-key: test-secret-sarvam-key
+  doc-ai-poll-interval-ms: 1000
+  doc-ai-max-poll-attempts: 3
+
+storage:
+  s3:
+    endpoint: http://localhost:9000
+    region: us-east-1
+    access-key: test
+    secret-key: test
+    bucket: test-bucket
+    presigned-url-expiration-minutes: 5
+
+spring:
+  flyway:
+    enabled: false
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
