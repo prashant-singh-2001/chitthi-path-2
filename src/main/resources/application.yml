@@ -1,0 +1,91 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: chitthi-backend
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/chitthi}
+    username: ${SPRING_DATASOURCE_USERNAME:chitthi}
+    password: ${SPRING_DATASOURCE_PASSWORD:chitthi}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  rabbitmq:
+    host: ${SPRING_RABBITMQ_HOST:localhost}
+    port: ${SPRING_RABBITMQ_PORT:5673}
+    username: ${SPRING_RABBITMQ_USERNAME:chitthi}
+    password: ${SPRING_RABBITMQ_PASSWORD:chitthi}
+
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 25MB
+
+sarvam:
+  base-url: ${SARVAM_BASE_URL:https://api.sarvam.ai}
+  api-subscription-key: ${SARVAM_API_KEY:mock-key}
+  doc-ai-poll-interval-ms: 5000
+  doc-ai-max-poll-attempts: 30
+
+storage:
+  s3:
+    endpoint: ${S3_ENDPOINT:http://localhost:9100}
+    region: ${S3_REGION:us-east-1}
+    access-key: ${S3_ACCESS_KEY:minioadmin}
+    secret-key: ${S3_SECRET_KEY:minioadmin}
+    bucket: ${S3_BUCKET:chitthi-documents}
+    presigned-url-expiration-minutes: 60
+
+chitthi:
+  pipeline:
+    page-concurrency: 5
+    max-retry-attempts: 3
+    daily-word-cap: 7000
+
+resilience4j:
+  ratelimiter:
+    instances:
+      sarvamDocAi:
+        limit-for-period: 10
+        limit-refresh-period: 60s
+        timeout-duration: 5s
+      sarvamTranslate:
+        limit-for-period: 100
+        limit-refresh-period: 60s
+        timeout-duration: 5s
+      sarvamTts:
+        limit-for-period: 100
+        limit-refresh-period: 60s
+        timeout-duration: 5s
+  circuitbreaker:
+    instances:
+      sarvamApi:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
