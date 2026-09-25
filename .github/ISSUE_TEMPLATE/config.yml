@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a Question
+    url: https://github.com/prashant-singh-2001/chitthi-path-2/discussions
+    about: Ask questions or share ideas with the Chitthi community.
+  - name: Security Vulnerability
+    url: https://github.com/prashant-singh-2001/chitthi-path-2/security/advisories/new
+    about: Report sensitive security vulnerabilities privately.

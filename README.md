@@ -15,8 +15,9 @@
 
 * **Description:**  
   `Digitize, search, and listen to handwritten Indian letters & heritage documents using Sarvam AI (Vision 1.5, Translate, Bulbul TTS), Spring Boot 3, RabbitMQ, and PostgreSQL.`
-* **Topics / Tags:**  
-  `spring-boot` · `java-21` · `sarvam-ai` · `document-ai` · `ocr` · `indic-nlp` · `tts` · `bulbul-v3` · `rabbitmq` · `postgresql` · `pg-trgm` · `minio` · `resilience4j` · `wiremock` · `testcontainers` · `handwriting-recognition` · `digital-archiving`
+* **Topics / Tags (20):**  
+  `spring-boot` · `java-21` · `sarvam-ai` · `document-ai` · `ocr` · `indic-nlp` · `tts` · `bulbul-v3` · `rabbitmq` · `postgresql` · `pg-trgm` · `minio` · `resilience4j` · `wiremock` · `testcontainers` · `handwriting-recognition` · `digital-archiving` · `indic-languages` · `devanagari` · `event-driven`
+* **Configuration Guide:** See [.github/METADATA.md](.github/METADATA.md) for full descriptions and one-click GitHub CLI commands.
 
 ---
 
@@ -174,14 +175,18 @@ Chitthi includes built-in safeguards to protect against quota exhaustion and une
 
 ---
 
-## 📄 Contributing & Guidelines
-
-Contributions are welcome! Please review:
+## 📄 Community & Governance
+ 
+Contributions and community feedback are welcome! Please review:
 * [CONTRIBUTING.md](CONTRIBUTING.md) — Setup and branch guidelines.
 * [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — Community standards.
+* [SECURITY.md](SECURITY.md) — Vulnerability disclosure and privacy practices.
+* [SUPPORT.md](SUPPORT.md) — Troubleshooting and support channels.
+* [CHANGELOG.md](CHANGELOG.md) — Release notes and upcoming roadmap.
 
 ---
 
 ## 📜 License
 
 Licensed under the [Apache License, Version 2.0](LICENSE).
+

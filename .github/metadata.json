@@ -1,0 +1,32 @@
+{
+  "name": "chitthi-path-2",
+  "description": "Digitize, search, and listen to handwritten Indian letters & heritage documents using Sarvam AI (Vision 1.5, Translate, Bulbul TTS), Spring Boot 3, RabbitMQ, and PostgreSQL.",
+  "homepage": "https://github.com/prashant-singh-2001/chitthi-path-2",
+  "private": false,
+  "has_issues": true,
+  "has_projects": true,
+  "has_wiki": false,
+  "has_discussions": true,
+  "topics": [
+    "spring-boot",
+    "java-21",
+    "sarvam-ai",
+    "document-ai",
+    "ocr",
+    "indic-nlp",
+    "tts",
+    "bulbul-v3",
+    "rabbitmq",
+    "postgresql",
+    "pg-trgm",
+    "minio",
+    "resilience4j",
+    "wiremock",
+    "testcontainers",
+    "handwriting-recognition",
+    "digital-archiving",
+    "indic-languages",
+    "devanagari",
+    "event-driven"
+  ]
+}
