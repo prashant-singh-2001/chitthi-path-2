@@ -6,12 +6,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
-import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
+
+import java.util.List;
 
 @Component
 public class SarvamClient {
@@ -20,15 +21,22 @@ public class SarvamClient {
     private final RestClient restClient;
     private final SarvamProperties properties;
 
-    public SarvamClient(SarvamProperties properties) {
+    public SarvamClient(RestClient.Builder restClientBuilder, SarvamProperties properties) {
         this.properties = properties;
-        
-        ClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        this.restClient = RestClient.builder()
+
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout((int) properties.connectTimeoutMs());
+        requestFactory.setReadTimeout((int) properties.readTimeoutMs());
+
+        RestClient.Builder builder = restClientBuilder
                 .baseUrl(properties.baseUrl())
-                .defaultHeader("api-subscription-key", properties.apiSubscriptionKey())
-                .requestFactory(requestFactory)
-                .build();
+                .requestFactory(requestFactory);
+
+        if (properties.apiSubscriptionKey() != null && !properties.apiSubscriptionKey().isBlank()) {
+            builder.defaultHeader("api-subscription-key", properties.apiSubscriptionKey());
+        }
+
+        this.restClient = builder.build();
     }
 
     /**
@@ -50,7 +58,7 @@ public class SarvamClient {
         body.add("output_format", "md");
 
         return restClient.post()
-                .uri("/doc-ai/v1/job/digitise")
+                .uri(properties.docAiEndpoint())
                 .contentType(MediaType.MULTIPART_FORM_DATA)
                 .body(body)
                 .retrieve()
@@ -62,7 +70,7 @@ public class SarvamClient {
      */
     public DigitiseJobStatusResponse getJobStatus(String jobId) {
         return restClient.get()
-                .uri("/doc-ai/v1/job/{jobId}/status", jobId)
+                .uri(properties.docAiStatusEndpoint(), jobId)
                 .retrieve()
                 .body(DigitiseJobStatusResponse.class);
     }
@@ -71,7 +79,6 @@ public class SarvamClient {
      * Download the result archive (ZIP containing page markdown and metadata).
      */
     public byte[] downloadJobResult(String downloadUrl) {
-        // downloadUrl might be absolute or relative
         return RestClient.create().get()
                 .uri(downloadUrl)
                 .retrieve()
@@ -82,13 +89,13 @@ public class SarvamClient {
      * Translate text from source Indic language to English.
      */
     public TranslateResponse translate(TranslateRequest request) {
-        log.debug("Translating text (chars: {}) from {} to {}", 
-                request.input() != null ? request.input().length() : 0, 
-                request.sourceLanguageCode(), 
+        log.debug("Translating text (chars: {}) from {} to {}",
+                request.input() != null ? request.input().length() : 0,
+                request.sourceLanguageCode(),
                 request.targetLanguageCode());
 
         return restClient.post()
-                .uri("/translate")
+                .uri(properties.translateEndpoint())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(request)
                 .retrieve()
@@ -96,18 +103,26 @@ public class SarvamClient {
     }
 
     /**
-     * Convert text to speech via Sarvam Bulbul v3.
+     * Convert text to speech via Sarvam Bulbul.
      */
     public TtsResponse textToSpeech(TtsRequest request) {
-        log.debug("Calling Bulbul TTS for language: {}, texts count: {}", 
-                request.targetLanguageCode(), 
+        log.debug("Calling Bulbul TTS for language: {}, texts count: {}",
+                request.targetLanguageCode(),
                 request.inputs() != null ? request.inputs().size() : 0);
 
         return restClient.post()
-                .uri("/text-to-speech/convert")
+                .uri(properties.ttsEndpoint())
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(request)
                 .retrieve()
                 .body(TtsResponse.class);
+    }
+
+    /**
+     * Convenience method to convert text to speech using configured speaker and model.
+     */
+    public TtsResponse textToSpeech(List<String> texts, String targetLanguageCode) {
+        TtsRequest request = TtsRequest.create(texts, targetLanguageCode, properties.ttsSpeaker(), properties.ttsModel());
+        return textToSpeech(request);
     }
 }

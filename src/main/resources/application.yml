@@ -42,9 +42,18 @@ spring:
 
 sarvam:
   base-url: ${SARVAM_BASE_URL:https://api.sarvam.ai}
-  api-subscription-key: ${SARVAM_API_KEY:mock-key}
+  api-subscription-key: ${SARVAM_API_KEY:}
   doc-ai-poll-interval-ms: 5000
   doc-ai-max-poll-attempts: 30
+  connect-timeout-ms: 5000
+  read-timeout-ms: 30000
+  doc-ai-endpoint: /doc-ai/v1/job/digitise
+  doc-ai-status-endpoint: /doc-ai/v1/job/{jobId}/status
+  translate-endpoint: /translate
+  tts-endpoint: /text-to-speech
+  tts-speaker: shubh
+  tts-model: bulbul:v3
+  translate-model: sarvam-translate:v1
 
 storage:
   s3:

@@ -16,17 +16,21 @@ public record TtsRequest(
         @JsonProperty("enable_preprocessing") Boolean enablePreprocessing,
         @JsonProperty("model") String model
 ) {
-    public static TtsRequest create(List<String> texts, String targetLanguageCode) {
+    public static TtsRequest create(List<String> texts, String targetLanguageCode, String speaker, String model) {
         return new TtsRequest(
                 texts,
                 targetLanguageCode,
-                "meera",
+                speaker,
                 0.0,
                 1.0,
                 1.0,
                 22050,
                 true,
-                "bulbul:v3"
+                model
         );
+    }
+
+    public static TtsRequest create(List<String> texts, String targetLanguageCode) {
+        return create(texts, targetLanguageCode, "shubh", "bulbul:v3");
     }
 }
