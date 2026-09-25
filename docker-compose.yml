@@ -35,7 +35,7 @@ services:
       retries: 5
 
   minio:
-    image: quay.io/minio/minio:latest
+    image: quay.io/minio/minio:RELEASE.2024-09-13T20-26-02Z
     container_name: chitthi-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -54,7 +54,7 @@ services:
       retries: 5
 
   createbuckets:
-    image: quay.io/minio/mc:latest
+    image: quay.io/minio/mc:RELEASE.2024-09-16T17-43-44Z
     container_name: chitthi-minio-init
     depends_on:
       minio:
@@ -63,7 +63,6 @@ services:
       /bin/sh -c "
       /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
       /usr/bin/mc mb --ignore-existing myminio/chitthi-documents;
-      /usr/bin/mc anonymous set download myminio/chitthi-documents;
       exit 0;
       "
 
