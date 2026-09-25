@@ -5,6 +5,7 @@ import com.chitthi.config.SarvamProperties;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import org.junit.jupiter.api.*;
+import org.springframework.web.client.RestClient;
 
 import java.util.List;
 
@@ -18,7 +19,7 @@ class SarvamClientWireMockTest {
 
     @BeforeAll
     static void startWireMock() {
-        wireMockServer = new WireMockServer(WireMockConfiguration.wireMockConfig().port(8888));
+        wireMockServer = new WireMockServer(WireMockConfiguration.wireMockConfig().dynamicPort());
         wireMockServer.start();
     }
 
@@ -33,12 +34,21 @@ class SarvamClientWireMockTest {
     void setUp() {
         wireMockServer.resetAll();
         SarvamProperties properties = new SarvamProperties(
-                "http://localhost:8888",
+                wireMockServer.baseUrl(),
                 "test-api-key-123",
                 1000,
-                5
+                5,
+                5000,
+                30000,
+                "/doc-ai/v1/job/digitise",
+                "/doc-ai/v1/job/{jobId}/status",
+                "/translate",
+                "/text-to-speech",
+                "shubh",
+                "bulbul:v3",
+                "sarvam-translate:v1"
         );
-        sarvamClient = new SarvamClient(properties);
+        sarvamClient = new SarvamClient(RestClient.builder(), properties);
     }
 
     @Test
@@ -95,18 +105,19 @@ class SarvamClientWireMockTest {
 
     @Test
     void testTextToSpeech() {
-        wireMockServer.stubFor(post(urlEqualTo("/text-to-speech/convert"))
+        wireMockServer.stubFor(post(urlEqualTo("/text-to-speech"))
                 .withHeader("api-subscription-key", equalTo("test-api-key-123"))
                 .willReturn(aResponse()
                         .withHeader("Content-Type", "application/json")
                         .withBody("{\"audios\":[\"UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=\"]}")
                         .withStatus(200)));
 
-        TtsRequest request = TtsRequest.create(List.of("Hello world"), "en-IN");
-        TtsResponse response = sarvamClient.textToSpeech(request);
+        TtsResponse response = sarvamClient.textToSpeech(List.of("Hello world"), "en-IN");
 
         assertNotNull(response);
         assertNotNull(response.audios());
         assertEquals(1, response.audios().size());
+        wireMockServer.verify(postRequestedFor(urlEqualTo("/text-to-speech"))
+                .withHeader("api-subscription-key", equalTo("test-api-key-123")));
     }
 }
