@@ -15,6 +15,8 @@ public interface PageRepository extends JpaRepository<PageEntity, UUID> {
 
     List<PageEntity> findByDocumentIdOrderByPageNoAsc(UUID documentId);
 
+    List<PageEntity> findByDocumentIdAndPageNoBetweenOrderByPageNoAsc(UUID documentId, Integer startPage, Integer endPage);
+
     Optional<PageEntity> findByDocumentIdAndPageNo(UUID documentId, Integer pageNo);
 
     /**
