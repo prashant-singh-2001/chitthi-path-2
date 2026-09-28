@@ -51,4 +51,16 @@ public class DocumentController {
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
+
+    /**
+     * Retrieve presigned audio streaming/download URL for the full stitched audio (English or original Indic).
+     */
+    @GetMapping("/{id}/audio")
+    public ResponseEntity<com.chitthi.api.dto.AudioLinkResponse> getDocumentAudio(
+            @PathVariable("id") UUID id,
+            @RequestParam(value = "lang", defaultValue = "en") String lang) {
+        return ingestionService.getDocumentAudioLink(id, lang)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
 }

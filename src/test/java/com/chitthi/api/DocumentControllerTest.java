@@ -88,4 +88,30 @@ class DocumentControllerTest {
         mockMvc.perform(get("/api/documents/" + docId))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void getDocumentAudio_whenExists_shouldReturnAudioLink() throws Exception {
+        UUID docId = UUID.randomUUID();
+        com.chitthi.api.dto.AudioLinkResponse audioLink = new com.chitthi.api.dto.AudioLinkResponse(
+                docId, "en", "http://minio:9100/chitthi-documents/documents/" + docId + "/audio/full_en.wav?token=abc"
+        );
+
+        when(ingestionService.getDocumentAudioLink(docId, "en")).thenReturn(Optional.of(audioLink));
+
+        mockMvc.perform(get("/api/documents/" + docId + "/audio?lang=en")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.documentId").value(docId.toString()))
+                .andExpect(jsonPath("$.language").value("en"))
+                .andExpect(jsonPath("$.audioUrl").value(audioLink.audioUrl()));
+    }
+
+    @Test
+    void getDocumentAudio_whenNotFound_shouldReturn404() throws Exception {
+        UUID docId = UUID.randomUUID();
+        when(ingestionService.getDocumentAudioLink(docId, "en")).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/documents/" + docId + "/audio?lang=en"))
+                .andExpect(status().isNotFound());
+    }
 }

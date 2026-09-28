@@ -224,6 +224,16 @@ public class DocumentIngestionService {
         });
     }
 
+    @Transactional(readOnly = true)
+    public Optional<AudioLinkResponse> getDocumentAudioLink(UUID documentId, String lang) {
+        return documentRepository.findById(documentId).map(doc -> {
+            String suffix = (lang != null && lang.equalsIgnoreCase("orig")) ? "orig" : "en";
+            String audioKey = "documents/" + documentId + "/audio/full_" + suffix + ".wav";
+            String presignedUrl = objectStorageService.generatePresignedUrl(audioKey);
+            return new AudioLinkResponse(documentId, suffix, presignedUrl);
+        });
+    }
+
     private void validateUploadFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("Upload file cannot be empty");
