@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chitthi | चिठ्ठी - Indic Letter Archive & Natural Audio Reader</title>
+    <meta name="description" content="Digitize, translate, and listen to scanned handwritten Indian letters using Sarvam AI, Spring Boot, and Dual-Voice Bulbul Speech.">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+        <div class="brand">
+            <div class="brand-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 7.5V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7.5"></path>
+                    <path d="m22 7-10 6L2 7"></path>
+                    <path d="M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2"></path>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+            </div>
+            <div class="brand-titles">
+                <h1 class="brand-name">चिठ्ठी <span class="brand-en">Chitthi</span></h1>
+                <p class="brand-tagline">Indic Handwritten Letter Archive & Natural Audio Reader</p>
+            </div>
+        </div>
+
+        <div class="header-actions">
+            <!-- Owner Id selector -->
+            <div class="owner-pill" id="ownerPill" title="Multi-tenant owner isolation">
+                <span class="owner-label">Owner:</span>
+                <input type="text" id="ownerIdInput" value="default" placeholder="User ID" class="owner-input" />
+            </div>
+
+            <!-- Archive Drawer Toggle -->
+            <button class="btn btn-secondary" id="btnToggleArchive" title="Open Letter Archive & Trigram Search">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <span>Archive & Search</span>
+            </button>
+
+            <!-- Upload Modal / View Trigger -->
+            <button class="btn btn-primary" id="btnNewUpload">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>Upload Letter</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        <!-- Left Column: Pipeline & Ingestion -->
+        <section class="left-panel">
+            <!-- Upload Card -->
+            <div class="card upload-card" id="uploadCard">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <span class="step-num">1</span>
+                        <span>Ingest Scanned Letter</span>
+                    </h2>
+                    <span class="badge badge-amber">PDF, PNG, JPG (&le; 20MB)</span>
+                </div>
+
+                <form id="uploadForm" class="upload-form">
+                    <div class="drop-zone" id="dropZone">
+                        <div class="drop-zone-icon">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="17 8 12 3 7 8"></polyline>
+                                <line x1="12" y1="3" x2="12" y2="15"></line>
+                            </svg>
+                        </div>
+                        <p class="drop-zone-text">Drag & drop your scanned Indian letter or <span class="link-text">Browse</span></p>
+                        <p class="drop-zone-sub" id="fileNameDisplay">Supports multi-page PDFs or single page scans</p>
+                        <input type="file" id="fileInput" name="file" accept=".pdf,image/png,image/jpeg,image/jpg" class="file-input-hidden" required>
+                    </div>
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="docTitle">Letter Title</label>
+                            <input type="text" id="docTitle" name="title" placeholder="e.g., Nanaji's Letter from Varanasi" required class="input-control">
+                        </div>
+
+                        <div class="form-row-2">
+                            <div class="form-group">
+                                <label for="docLanguage">Original Indic Language</label>
+                                <select id="docLanguage" name="language" class="input-control select-control">
+                                    <option value="hi" selected>Hindi (हिन्दी)</option>
+                                    <option value="bn">Bengali (বাংলা)</option>
+                                    <option value="gu">Gujarati (ગુજરાતી)</option>
+                                    <option value="kn">Kannada (ಕನ್ನಡ)</option>
+                                    <option value="ml">Malayalam (മലയാളം)</option>
+                                    <option value="mr">Marathi (मराठी)</option>
+                                    <option value="od">Odia (ଓଡ଼ିଆ)</option>
+                                    <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
+                                    <option value="ta">Tamil (தமிழ்)</option>
+                                    <option value="te">Telugu (తెలుగు)</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="docYear">Estimated Year (optional)</label>
+                                <input type="number" id="docYear" name="year" placeholder="e.g. 1974" min="1800" max="2030" class="input-control">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="btnSubmitUpload" class="btn btn-primary btn-block">
+                        <span id="btnSubmitText">Start Ingestion & Digitization Pipeline</span>
+                        <div class="spinner hidden" id="uploadSpinner"></div>
+                    </button>
+                </form>
+            </div>
+
+            <!-- Live Pipeline Tracker Card -->
+            <div class="card tracker-card" id="trackerCard">
+                <div class="card-header">
+                    <div>
+                        <h2 class="card-title">
+                            <span class="step-num">2</span>
+                            <span>Live Pipeline Progress</span>
+                        </h2>
+                        <div class="doc-meta-bar" id="docMetaBar">
+                            <span class="meta-item doc-id" id="activeDocId">No letter active</span>
+                            <span class="status-pill status-idle" id="activeStatusPill">IDLE</span>
+                        </div>
+                    </div>
+
+                    <div class="sse-status" id="sseIndicator" title="SSE Stream Status">
+                        <span class="pulse-dot pulse-idle"></span>
+                        <span class="sse-text" id="sseStatusText">Stream Idle</span>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="progress-container">
+                    <div class="progress-bar-bg">
+                        <div class="progress-bar-fill" id="pipelineProgressFill" style="width: 0%;"></div>
+                    </div>
+                    <div class="progress-labels">
+                        <span id="progressPercentText">0% Completed</span>
+                        <span id="progressEtaText">Awaiting upload</span>
+                    </div>
+                </div>
+
+                <!-- 5 Stage Stepper -->
+                <div class="stages-timeline">
+                    <!-- Stage 1 -->
+                    <div class="stage-step" id="step-UPLOAD">
+                        <div class="stage-icon-circle">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                            </svg>
+                        </div>
+                        <div class="stage-details">
+                            <div class="stage-header">
+                                <span class="stage-name">1. Document Ingest</span>
+                                <span class="stage-state state-waiting">Waiting</span>
+                            </div>
+                            <p class="stage-desc">PDF chunking &le; 10 pages, 150 DPI page rendering</p>
+                        </div>
+                    </div>
+
+                    <!-- Stage 2 -->
+                    <div class="stage-step" id="step-OCR">
+                        <div class="stage-icon-circle">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                <line x1="7" y1="8" x2="17" y2="8"></line>
+                                <line x1="7" y1="12" x2="17" y2="12"></line>
+                                <line x1="7" y1="16" x2="13" y2="16"></line>
+                            </svg>
+                        </div>
+                        <div class="stage-details">
+                            <div class="stage-header">
+                                <span class="stage-name">2. Sarvam Document AI</span>
+                                <span class="stage-state state-waiting">Waiting</span>
+                            </div>
+                            <p class="stage-desc">Async handwriting OCR & Indic layout parsing</p>
+                        </div>
+                    </div>
+
+                    <!-- Stage 3 -->
+                    <div class="stage-step" id="step-TRANSLATE">
+                        <div class="stage-icon-circle">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="m5 8 6 6"></path>
+                                <path d="m4 14 6-6 2-3"></path>
+                                <path d="M2 5h12"></path>
+                                <path d="M7 2h1"></path>
+                                <path d="m22 22-5-10-5 10"></path>
+                                <path d="M14 18h6"></path>
+                            </svg>
+                        </div>
+                        <div class="stage-details">
+                            <div class="stage-header">
+                                <span class="stage-name">3. Indic Translation</span>
+                                <span class="stage-state state-waiting">Waiting</span>
+                            </div>
+                            <p class="stage-desc">Sentence chunking & Sarvam Translate v1</p>
+                        </div>
+                    </div>
+
+                    <!-- Stage 4 -->
+                    <div class="stage-step" id="step-TTS">
+                        <div class="stage-icon-circle">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                                <line x1="12" y1="19" x2="12" y2="23"></line>
+                                <line x1="8" y1="23" x2="16" y2="23"></line>
+                            </svg>
+                        </div>
+                        <div class="stage-details">
+                            <div class="stage-header">
+                                <span class="stage-name">4. Bulbul Voice Studio</span>
+                                <span class="stage-state state-waiting">Waiting</span>
+                            </div>
+                            <p class="stage-desc">Dual-voice natural speech synthesis (shubh / bulbul:v3)</p>
+                        </div>
+                    </div>
+
+                    <!-- Stage 5 -->
+                    <div class="stage-step" id="step-ASSEMBLE">
+                        <div class="stage-icon-circle">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                                <polyline points="2 17 12 22 22 17"></polyline>
+                                <polyline points="2 12 12 17 22 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="stage-details">
+                            <div class="stage-header">
+                                <span class="stage-name">5. Master Assembly</span>
+                                <span class="stage-state state-waiting">Waiting</span>
+                            </div>
+                            <p class="stage-desc">Audio WAV concatenation & pg_trgm search indexing</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Event Stream Log Accordion -->
+                <div class="stream-log-container">
+                    <div class="stream-log-header" id="logToggleBtn">
+                        <span class="log-title">Live Event Stream Log</span>
+                        <span class="log-count" id="logCountBadge">0 events</span>
+                    </div>
+                    <div class="stream-log-body" id="eventLogList">
+                        <div class="log-empty">Waiting for events from pipeline...</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Column: Interactive Reader & Dual-Voice Audio Studio -->
+        <section class="right-panel">
+            <!-- Audio Studio Player Card -->
+            <div class="card audio-card" id="audioPlayerCard">
+                <div class="audio-header">
+                    <div class="audio-info">
+                        <div class="audio-wave-anim" id="waveAnimation">
+                            <span class="bar bar-1"></span>
+                            <span class="bar bar-2"></span>
+                            <span class="bar bar-3"></span>
+                            <span class="bar bar-4"></span>
+                            <span class="bar bar-5"></span>
+                        </div>
+                        <div>
+                            <h3 class="audio-title" id="playerAudioTitle">Natural Audio Reader</h3>
+                            <span class="audio-subtitle" id="playerAudioTrack">Select a track below</span>
+                        </div>
+                    </div>
+
+                    <!-- Dual-Voice Track Selector Toggle -->
+                    <div class="voice-toggle-group">
+                        <button class="voice-btn active" id="btnVoiceEn" data-lang="en">
+                            <span class="voice-flag">🌐</span>
+                            <span>English Audio</span>
+                        </button>
+                        <button class="voice-btn" id="btnVoiceOrig" data-lang="orig">
+                            <span class="voice-flag">🇮🇳</span>
+                            <span id="voiceOrigLabel">Original Indic</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Modern Audio Controls -->
+                <div class="audio-controls-row">
+                    <button class="player-btn play-pause-btn" id="btnPlayPause" disabled title="Play/Pause">
+                        <svg class="icon-play" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        <svg class="icon-pause hidden" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="4" width="4" height="16"></rect>
+                            <rect x="14" y="4" width="4" height="16"></rect>
+                        </svg>
+                    </button>
+
+                    <div class="timeline-container">
+                        <span class="time-label" id="audioCurrentTime">00:00</span>
+                        <input type="range" class="audio-timeline" id="audioTimeline" value="0" min="0" max="100" step="0.1" disabled>
+                        <span class="time-label" id="audioDuration">00:00</span>
+                    </div>
+
+                    <div class="volume-container">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                        </svg>
+                        <input type="range" class="volume-slider" id="audioVolume" min="0" max="1" step="0.05" value="1">
+                    </div>
+
+                    <a class="player-btn download-btn" id="btnDownloadAudio" href="#" download target="_blank" title="Download WAV Audio Track">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                    </a>
+                </div>
+
+                <!-- Hidden Native Audio Element -->
+                <audio id="nativeAudio"></audio>
+            </div>
+
+            <!-- Side-by-Side Letter Reader Card -->
+            <div class="card reader-card" id="readerCard">
+                <div class="reader-toolbar">
+                    <div class="page-pager">
+                        <button class="pager-btn" id="btnPrevPage" disabled title="Previous Page">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                            </svg>
+                        </button>
+                        <span class="pager-display" id="pageDisplay">Page 1 of 1</span>
+                        <button class="pager-btn" id="btnNextPage" disabled title="Next Page">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="view-toggles">
+                        <button class="toggle-btn active" id="btnViewSplit" title="Side-by-Side Comparison">Split View</button>
+                        <button class="toggle-btn" id="btnViewScan" title="Scan Image Only">Scan Only</button>
+                        <button class="toggle-btn" id="btnViewText" title="Transcribed Text Only">Text Only</button>
+                    </div>
+                </div>
+
+                <!-- Split Pane Container -->
+                <div class="split-reader-container" id="splitReader">
+                    <!-- Left: Original Scanned Letter Page -->
+                    <div class="reader-pane original-pane" id="originalPane">
+                        <div class="pane-header">
+                            <span class="pane-badge badge-orig">Original Indic Document</span>
+                            <span class="pane-meta" id="origPageMeta">Page 1</span>
+                        </div>
+                        <div class="scan-image-wrapper" id="scanImageWrapper">
+                            <div class="reader-placeholder" id="scanPlaceholder">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                    <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                    <polyline points="21 15 16 10 5 21"></polyline>
+                                </svg>
+                                <p>Upload a letter or select one from the Archive to view the scanned original scan.</p>
+                            </div>
+                            <img id="scannedImage" class="scanned-image hidden" alt="Original Scanned Handwritten Page" />
+                        </div>
+                        <!-- Transcribed Indic Text Box -->
+                        <div class="transcribed-text-box" id="transcribedBox">
+                            <div class="sub-header">Transcribed Indic Text (Sarvam OCR)</div>
+                            <p class="indic-text-content" id="indicTextDisplay">OCR transcription will appear here once processed.</p>
+                        </div>
+                    </div>
+
+                    <!-- Right: Curated English Translation -->
+                    <div class="reader-pane translation-pane" id="translationPane">
+                        <div class="pane-header">
+                            <span class="pane-badge badge-trans">Curated English Translation</span>
+                            <span class="pane-meta" id="transPageMeta">Sarvam Translate v1</span>
+                        </div>
+                        <div class="translation-content-wrapper">
+                            <div class="reader-placeholder" id="translationPlaceholder">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                    <path d="m5 8 6 6"></path>
+                                    <path d="m4 14 6-6 2-3"></path>
+                                    <path d="M2 5h12"></path>
+                                    <path d="M7 2h1"></path>
+                                    <path d="m22 22-5-10-5 10"></path>
+                                    <path d="M14 18h6"></path>
+                                </svg>
+                                <p>English translation with sentence boundaries will appear here.</p>
+                            </div>
+                            <div class="english-text-content hidden" id="englishTextDisplay"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Slide-Out Archive & Trigram Search Drawer -->
+    <aside class="archive-drawer" id="archiveDrawer">
+        <div class="drawer-header">
+            <div>
+                <h3 class="drawer-title">Letters Archive & Indic Search</h3>
+                <p class="drawer-subtitle">Fuzzy Indic trigrams (pg_trgm) & English full-text search</p>
+            </div>
+            <button class="drawer-close-btn" id="btnCloseArchive" title="Close Drawer">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Search Bar -->
+        <div class="drawer-search-box">
+            <div class="search-input-wrapper">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="archiveSearchInput" placeholder="Search Indic letters (e.g. पत्र, नानाजी, health)..." class="search-input">
+            </div>
+
+            <!-- Mode Selector -->
+            <div class="search-modes">
+                <label class="mode-label">
+                    <input type="radio" name="searchMode" value="indic" checked>
+                    <span>Indic Trigram (pg_trgm)</span>
+                </label>
+                <label class="mode-label">
+                    <input type="radio" name="searchMode" value="en">
+                    <span>English Full-Text (FTS)</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Search Results / Document List -->
+        <div class="drawer-body">
+            <div class="drawer-section-title" id="drawerListHeader">Recent Letters</div>
+            <div class="letter-list" id="archiveLetterList">
+                <div class="drawer-empty">Loading indexed letters...</div>
+            </div>
+        </div>
+    </aside>
+    <div class="drawer-backdrop hidden" id="drawerBackdrop"></div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Frontend Logic -->
+    <script src="app.js"></script>
+</body>
+</html>
