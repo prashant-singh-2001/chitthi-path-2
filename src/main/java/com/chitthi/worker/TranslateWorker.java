@@ -12,6 +12,7 @@ import com.chitthi.messaging.dto.PageTranslateMessage;
 import com.chitthi.repository.ApiCallRepository;
 import com.chitthi.repository.PageRepository;
 import com.chitthi.repository.StageTaskRepository;
+import com.chitthi.service.DocumentProgressEventService;
 import com.chitthi.service.TextChunkingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,19 +39,22 @@ public class TranslateWorker {
     private final SarvamClient sarvamClient;
     private final TextChunkingService textChunkingService;
     private final RabbitTemplate rabbitTemplate;
+    private final DocumentProgressEventService eventService;
 
     public TranslateWorker(PageRepository pageRepository,
                            StageTaskRepository stageTaskRepository,
                            ApiCallRepository apiCallRepository,
                            SarvamClient sarvamClient,
                            TextChunkingService textChunkingService,
-                           RabbitTemplate rabbitTemplate) {
+                           RabbitTemplate rabbitTemplate,
+                           DocumentProgressEventService eventService) {
         this.pageRepository = pageRepository;
         this.stageTaskRepository = stageTaskRepository;
         this.apiCallRepository = apiCallRepository;
         this.sarvamClient = sarvamClient;
         this.textChunkingService = textChunkingService;
         this.rabbitTemplate = rabbitTemplate;
+        this.eventService = eventService;
     }
 
     @RabbitListener(queues = RabbitConfig.TRANSLATE_QUEUE)
@@ -136,12 +140,16 @@ public class TranslateWorker {
             stageTaskRepository.save(stageTask);
 
             log.info("Page {} translated successfully (translated chars: {})", page.getId(), fullTranslatedText.length());
+            eventService.emitProgress(message.documentId(), message.pageNo(), "TRANSLATE", "COMPLETED", 
+                    "Page " + message.pageNo() + " translated to English");
             dispatchTts(message);
 
         } catch (Exception e) {
             log.error("Failed to translate page {}", page.getId(), e);
             page.setStatus("FAILED");
             pageRepository.save(page);
+            eventService.emitProgress(message.documentId(), message.pageNo(), "TRANSLATE", "FAILED", 
+                    "Translation failed for page " + message.pageNo() + ": " + e.getMessage());
             throw new RuntimeException("Error translating page " + page.getId(), e);
         }
     }

@@ -7,6 +7,7 @@ import com.chitthi.messaging.dto.DocumentAssembleMessage;
 import com.chitthi.repository.DocumentRepository;
 import com.chitthi.repository.PageRepository;
 import com.chitthi.service.AudioStitcherService;
+import com.chitthi.service.DocumentProgressEventService;
 import com.chitthi.storage.ObjectStorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,15 +28,18 @@ public class AudioAssemblerWorker {
     private final PageRepository pageRepository;
     private final ObjectStorageService objectStorageService;
     private final AudioStitcherService audioStitcherService;
+    private final DocumentProgressEventService eventService;
 
     public AudioAssemblerWorker(DocumentRepository documentRepository,
                                 PageRepository pageRepository,
                                 ObjectStorageService objectStorageService,
-                                AudioStitcherService audioStitcherService) {
+                                AudioStitcherService audioStitcherService,
+                                DocumentProgressEventService eventService) {
         this.documentRepository = documentRepository;
         this.pageRepository = pageRepository;
         this.objectStorageService = objectStorageService;
         this.audioStitcherService = audioStitcherService;
+        this.eventService = eventService;
     }
 
     @RabbitListener(queues = RabbitConfig.ASSEMBLE_QUEUE)
@@ -83,11 +87,15 @@ public class AudioAssemblerWorker {
             documentRepository.save(document);
 
             log.info("Document {} assembled and marked COMPLETE with all pages INDEXED", document.getId());
+            eventService.emitProgress(message.documentId(), null, "ASSEMBLE", "COMPLETED", 
+                    "All pages assembled and document indexed successfully");
 
         } catch (Exception e) {
             log.error("Failed to assemble audio for document {}", document.getId(), e);
             document.setStatus("PARTIAL");
             documentRepository.save(document);
+            eventService.emitProgress(message.documentId(), null, "ASSEMBLE", "FAILED", 
+                    "Audio assembly failed: " + e.getMessage());
             throw new RuntimeException("Error assembling document audio " + document.getId(), e);
         }
     }

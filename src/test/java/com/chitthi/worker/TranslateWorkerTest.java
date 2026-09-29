@@ -50,6 +50,9 @@ class TranslateWorkerTest {
     @Mock
     private RabbitTemplate rabbitTemplate;
 
+    @Mock
+    private com.chitthi.service.DocumentProgressEventService eventService;
+
     private TranslateWorker translateWorker;
 
     @BeforeEach
@@ -60,7 +63,8 @@ class TranslateWorkerTest {
                 apiCallRepository,
                 sarvamClient,
                 textChunkingService,
-                rabbitTemplate
+                rabbitTemplate,
+                eventService
         );
     }
 

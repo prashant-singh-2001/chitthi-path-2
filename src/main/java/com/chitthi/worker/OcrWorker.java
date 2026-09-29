@@ -8,6 +8,7 @@ import com.chitthi.domain.entity.OcrBatchEntity;
 import com.chitthi.messaging.dto.OcrBatchMessage;
 import com.chitthi.repository.ApiCallRepository;
 import com.chitthi.repository.OcrBatchRepository;
+import com.chitthi.service.DocumentProgressEventService;
 import com.chitthi.storage.ObjectStorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,15 +31,18 @@ public class OcrWorker {
     private final ApiCallRepository apiCallRepository;
     private final ObjectStorageService objectStorageService;
     private final SarvamClient sarvamClient;
+    private final DocumentProgressEventService eventService;
 
     public OcrWorker(OcrBatchRepository ocrBatchRepository,
                      ApiCallRepository apiCallRepository,
                      ObjectStorageService objectStorageService,
-                     SarvamClient sarvamClient) {
+                     SarvamClient sarvamClient,
+                     DocumentProgressEventService eventService) {
         this.ocrBatchRepository = ocrBatchRepository;
         this.apiCallRepository = apiCallRepository;
         this.objectStorageService = objectStorageService;
         this.sarvamClient = sarvamClient;
+        this.eventService = eventService;
     }
 
     @RabbitListener(queues = RabbitConfig.OCR_QUEUE)
@@ -100,10 +104,15 @@ public class OcrWorker {
             );
             apiCallRepository.save(apiCall);
 
+            eventService.emitProgress(message.documentId(), null, "OCR", "SUBMITTED", 
+                    "Submitted OCR batch (" + message.pageRange() + ") to Sarvam Document AI");
+
         } catch (Exception e) {
             log.error("Failed to submit Sarvam Document AI job for batch: {}", batch.getId(), e);
             batch.setStatus("FAILED");
             ocrBatchRepository.save(batch);
+            eventService.emitProgress(message.documentId(), null, "OCR", "FAILED", 
+                    "Failed to submit OCR batch (" + message.pageRange() + "): " + e.getMessage());
             throw new RuntimeException("Error processing OCR batch " + batch.getId(), e);
         }
     }

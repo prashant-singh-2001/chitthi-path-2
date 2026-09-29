@@ -36,6 +36,9 @@ class AudioAssemblerWorkerTest {
     @Mock
     private AudioStitcherService audioStitcherService;
 
+    @Mock
+    private com.chitthi.service.DocumentProgressEventService eventService;
+
     private AudioAssemblerWorker assemblerWorker;
 
     @BeforeEach
@@ -44,7 +47,8 @@ class AudioAssemblerWorkerTest {
                 documentRepository,
                 pageRepository,
                 objectStorageService,
-                audioStitcherService
+                audioStitcherService,
+                eventService
         );
     }
 

@@ -33,6 +33,9 @@ class DocumentControllerTest {
     @MockBean
     private DocumentIngestionService ingestionService;
 
+    @MockBean
+    private com.chitthi.service.DocumentProgressEventService eventService;
+
     @Test
     void uploadDocument_shouldReturnAccepted() throws Exception {
         UUID docId = UUID.randomUUID();
@@ -114,4 +117,45 @@ class DocumentControllerTest {
         mockMvc.perform(get("/api/documents/" + docId + "/audio?lang=en"))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void streamDocumentEvents_shouldReturnSseEmitter() throws Exception {
+        UUID docId = UUID.randomUUID();
+        org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter = new org.springframework.web.servlet.mvc.method.annotation.SseEmitter();
+        when(eventService.registerEmitter(docId)).thenReturn(emitter);
+
+        mockMvc.perform(get("/api/documents/" + docId + "/events"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void listDocuments_shouldReturnList() throws Exception {
+        UUID docId = UUID.randomUUID();
+        DocumentDetailResponse doc = new DocumentDetailResponse(
+                docId, "default", "Grandfather Letter", "hi", "COMPLETE", 1974,
+                List.of("family"), List.of(), Instant.now(), Instant.now()
+        );
+        when(ingestionService.listDocuments("default")).thenReturn(List.of(doc));
+
+        mockMvc.perform(get("/api/documents?ownerId=default"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(docId.toString()))
+                .andExpect(jsonPath("$[0].title").value("Grandfather Letter"));
+    }
+
+    @Test
+    void searchDocuments_shouldReturnResults() throws Exception {
+        UUID docId = UUID.randomUUID();
+        com.chitthi.api.dto.SearchResultItem item = new com.chitthi.api.dto.SearchResultItem(
+                docId, "Grandfather Letter", 1, "नानाजी का पत्र मिला...", "INDIC_TRIGRAM"
+        );
+        when(ingestionService.searchDocuments("default", "पत्र", "indic")).thenReturn(List.of(item));
+
+        mockMvc.perform(get("/api/documents/search?query=पत्र&mode=indic&ownerId=default"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].documentId").value(docId.toString()))
+                .andExpect(jsonPath("$[0].pageNo").value(1))
+                .andExpect(jsonPath("$[0].matchType").value("INDIC_TRIGRAM"));
+    }
 }
+

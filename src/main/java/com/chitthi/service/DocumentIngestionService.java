@@ -39,6 +39,7 @@ public class DocumentIngestionService {
     private final PdfSplitterService pdfSplitterService;
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
+    private final DocumentProgressEventService eventService;
 
     public DocumentIngestionService(DocumentRepository documentRepository,
                                   PageRepository pageRepository,
@@ -47,7 +48,8 @@ public class DocumentIngestionService {
                                   ObjectStorageService objectStorageService,
                                   PdfSplitterService pdfSplitterService,
                                   RabbitTemplate rabbitTemplate,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  DocumentProgressEventService eventService) {
         this.documentRepository = documentRepository;
         this.pageRepository = pageRepository;
         this.ocrBatchRepository = ocrBatchRepository;
@@ -56,6 +58,7 @@ public class DocumentIngestionService {
         this.pdfSplitterService = pdfSplitterService;
         this.rabbitTemplate = rabbitTemplate;
         this.objectMapper = objectMapper;
+        this.eventService = eventService;
     }
 
     @Transactional
@@ -179,6 +182,9 @@ public class DocumentIngestionService {
             log.info("Dispatched OCR batch message for batchId: {}, pageRange: {}", batch.getId(), batch.getPageRange());
         }
 
+        eventService.emitProgress(documentId, null, "UPLOAD", "COMPLETED", 
+                "Document uploaded successfully with " + pagesToSave.size() + " pages and " + batchesToSave.size() + " OCR batches");
+
         return new DocumentUploadResponse(
                 documentId,
                 document.getTitle(),
@@ -222,6 +228,79 @@ public class DocumentIngestionService {
                     doc.getUpdatedAt()
             );
         });
+    }
+
+    @Transactional(readOnly = true)
+    public List<DocumentDetailResponse> listDocuments(String ownerId) {
+        String effectiveOwner = (ownerId != null && !ownerId.isBlank()) ? ownerId : "default";
+        return documentRepository.findByOwnerIdOrderByCreatedAtDesc(effectiveOwner)
+                .stream()
+                .map(doc -> {
+                    List<PageEntity> pages = pageRepository.findByDocumentIdOrderByPageNoAsc(doc.getId());
+                    List<PageSummaryResponse> pageSummaries = pages.stream().map(p -> new PageSummaryResponse(
+                            p.getId(),
+                            p.getPageNo(),
+                            p.getStatus(),
+                            Boolean.TRUE.equals(p.getEdited()),
+                            p.getOriginalText(),
+                            p.getTranslatedText(),
+                            p.getImageKey() != null ? objectStorageService.generatePresignedUrl(p.getImageKey()) : null
+                    )).toList();
+                    return new DocumentDetailResponse(
+                            doc.getId(),
+                            doc.getOwnerId(),
+                            doc.getTitle(),
+                            doc.getLanguage(),
+                            doc.getStatus(),
+                            doc.getYear(),
+                            parseTags(doc.getTags()),
+                            pageSummaries,
+                            doc.getCreatedAt(),
+                            doc.getUpdatedAt()
+                    );
+                }).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SearchResultItem> searchDocuments(String ownerId, String query, String mode) {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        String effectiveOwner = (ownerId != null && !ownerId.isBlank()) ? ownerId : "default";
+        List<PageEntity> pages;
+        String matchType;
+        if ("en".equalsIgnoreCase(mode) || "english".equalsIgnoreCase(mode)) {
+            pages = pageRepository.searchTranslatedTextFullText(effectiveOwner, query);
+            matchType = "ENGLISH_FTS";
+        } else {
+            pages = pageRepository.searchOriginalTextTrgm(effectiveOwner, query);
+            matchType = "INDIC_TRIGRAM";
+        }
+
+        return pages.stream().map(p -> {
+            String text = "en".equalsIgnoreCase(mode) ? p.getTranslatedText() : p.getOriginalText();
+            String snippet = truncateSnippet(text, query, 140);
+            return new SearchResultItem(
+                    p.getDocument().getId(),
+                    p.getDocument().getTitle(),
+                    p.getPageNo(),
+                    snippet,
+                    matchType
+            );
+        }).toList();
+    }
+
+    private String truncateSnippet(String text, String query, int maxLen) {
+        if (text == null) return "";
+        int idx = text.toLowerCase().indexOf(query.toLowerCase());
+        if (idx == -1) {
+            return text.length() > maxLen ? text.substring(0, maxLen) + "..." : text;
+        }
+        int start = Math.max(0, idx - 40);
+        int end = Math.min(text.length(), idx + query.length() + 80);
+        String prefix = start > 0 ? "..." : "";
+        String suffix = end < text.length() ? "..." : "";
+        return prefix + text.substring(start, end).trim() + suffix;
     }
 
     @Transactional(readOnly = true)

@@ -55,6 +55,9 @@ class OcrBatchStatusPollerTest {
     @Mock
     private RabbitTemplate rabbitTemplate;
 
+    @Mock
+    private com.chitthi.service.DocumentProgressEventService eventService;
+
     private ObjectMapper objectMapper;
     private SarvamProperties sarvamProperties;
     private OcrBatchStatusPoller poller;
@@ -85,7 +88,8 @@ class OcrBatchStatusPollerTest {
                 sarvamClient,
                 sarvamProperties,
                 rabbitTemplate,
-                objectMapper
+                objectMapper,
+                eventService
         );
     }
 

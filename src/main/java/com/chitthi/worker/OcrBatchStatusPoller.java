@@ -12,6 +12,7 @@ import com.chitthi.repository.DocumentRepository;
 import com.chitthi.repository.OcrBatchRepository;
 import com.chitthi.repository.PageRepository;
 import com.chitthi.repository.StageTaskRepository;
+import com.chitthi.service.DocumentProgressEventService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -44,6 +45,7 @@ public class OcrBatchStatusPoller {
     private final SarvamProperties sarvamProperties;
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
+    private final DocumentProgressEventService eventService;
 
     public OcrBatchStatusPoller(OcrBatchRepository ocrBatchRepository,
                                PageRepository pageRepository,
@@ -52,7 +54,8 @@ public class OcrBatchStatusPoller {
                                SarvamClient sarvamClient,
                                SarvamProperties sarvamProperties,
                                RabbitTemplate rabbitTemplate,
-                               ObjectMapper objectMapper) {
+                               ObjectMapper objectMapper,
+                               DocumentProgressEventService eventService) {
         this.ocrBatchRepository = ocrBatchRepository;
         this.pageRepository = pageRepository;
         this.documentRepository = documentRepository;
@@ -61,6 +64,7 @@ public class OcrBatchStatusPoller {
         this.sarvamProperties = sarvamProperties;
         this.rabbitTemplate = rabbitTemplate;
         this.objectMapper = objectMapper;
+        this.eventService = eventService;
     }
 
     @Scheduled(fixedDelayString = "${sarvam.doc-ai-poll-interval-ms:5000}")
@@ -154,6 +158,8 @@ public class OcrBatchStatusPoller {
             );
             rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE_NAME, RabbitConfig.TRANSLATE_ROUTING_KEY, translateMessage);
             log.info("Dispatched translate message for page {} of document {}", page.getPageNo(), batch.getDocument().getId());
+            eventService.emitProgress(batch.getDocument().getId(), page.getPageNo(), "OCR", "COMPLETED", 
+                    "Page " + page.getPageNo() + " OCR text extracted");
         }
 
         batch.setStatus("COMPLETED");
@@ -166,6 +172,8 @@ public class OcrBatchStatusPoller {
 
         batch.setStatus("FAILED");
         ocrBatchRepository.save(batch);
+
+        eventService.emitProgress(batch.getDocument().getId(), null, "OCR", "FAILED", errorMessage);
 
         int[] range = parsePageRange(batch.getPageRange());
         List<PageEntity> pages = pageRepository

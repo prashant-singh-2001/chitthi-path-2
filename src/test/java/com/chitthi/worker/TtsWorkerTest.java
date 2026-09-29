@@ -58,6 +58,9 @@ class TtsWorkerTest {
     @Mock
     private RabbitTemplate rabbitTemplate;
 
+    @Mock
+    private com.chitthi.service.DocumentProgressEventService eventService;
+
     private TtsWorker ttsWorker;
 
     @BeforeEach
@@ -70,7 +73,8 @@ class TtsWorkerTest {
                 sarvamClient,
                 textChunkingService,
                 audioStitcherService,
-                rabbitTemplate
+                rabbitTemplate,
+                eventService
         );
     }
 

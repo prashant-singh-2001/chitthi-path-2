@@ -39,11 +39,14 @@ class OcrWorkerTest {
     @Mock
     private SarvamClient sarvamClient;
 
+    @Mock
+    private com.chitthi.service.DocumentProgressEventService eventService;
+
     private OcrWorker ocrWorker;
 
     @BeforeEach
     void setUp() {
-        ocrWorker = new OcrWorker(ocrBatchRepository, apiCallRepository, objectStorageService, sarvamClient);
+        ocrWorker = new OcrWorker(ocrBatchRepository, apiCallRepository, objectStorageService, sarvamClient, eventService);
     }
 
     @Test

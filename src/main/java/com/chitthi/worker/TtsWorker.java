@@ -12,6 +12,7 @@ import com.chitthi.repository.ApiCallRepository;
 import com.chitthi.repository.PageRepository;
 import com.chitthi.repository.StageTaskRepository;
 import com.chitthi.service.AudioStitcherService;
+import com.chitthi.service.DocumentProgressEventService;
 import com.chitthi.service.TextChunkingService;
 import com.chitthi.storage.ObjectStorageService;
 import org.slf4j.Logger;
@@ -45,6 +46,7 @@ public class TtsWorker {
     private final TextChunkingService textChunkingService;
     private final AudioStitcherService audioStitcherService;
     private final RabbitTemplate rabbitTemplate;
+    private final DocumentProgressEventService eventService;
 
     public TtsWorker(PageRepository pageRepository,
                      StageTaskRepository stageTaskRepository,
@@ -53,7 +55,8 @@ public class TtsWorker {
                      SarvamClient sarvamClient,
                      TextChunkingService textChunkingService,
                      AudioStitcherService audioStitcherService,
-                     RabbitTemplate rabbitTemplate) {
+                     RabbitTemplate rabbitTemplate,
+                     DocumentProgressEventService eventService) {
         this.pageRepository = pageRepository;
         this.stageTaskRepository = stageTaskRepository;
         this.apiCallRepository = apiCallRepository;
@@ -62,6 +65,7 @@ public class TtsWorker {
         this.textChunkingService = textChunkingService;
         this.audioStitcherService = audioStitcherService;
         this.rabbitTemplate = rabbitTemplate;
+        this.eventService = eventService;
     }
 
     @RabbitListener(queues = RabbitConfig.TTS_QUEUE)
@@ -131,6 +135,8 @@ public class TtsWorker {
             stageTaskRepository.save(stageTask);
 
             log.info("Page {} audio synthesis completed", page.getId());
+            eventService.emitProgress(message.documentId(), message.pageNo(), "TTS", "COMPLETED", 
+                    "Voice readout synthesized for page " + message.pageNo());
 
             // 5. Trigger assembly check
             checkAndTriggerAssembly(message.documentId());
@@ -139,6 +145,8 @@ public class TtsWorker {
             log.error("Failed TTS generation for page {}", page.getId(), e);
             page.setStatus("FAILED");
             pageRepository.save(page);
+            eventService.emitProgress(message.documentId(), message.pageNo(), "TTS", "FAILED", 
+                    "Audio synthesis failed for page " + message.pageNo() + ": " + e.getMessage());
             throw new RuntimeException("Error synthesizing audio for page " + page.getId(), e);
         }
     }
