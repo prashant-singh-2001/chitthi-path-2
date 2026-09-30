@@ -169,17 +169,25 @@ public class DocumentIngestionService {
                     request.language()
             );
 
+            OutboxEntity outbox = null;
             try {
                 String payload = objectMapper.writeValueAsString(message);
-                OutboxEntity outbox = new OutboxEntity(UUID.randomUUID(), RabbitConfig.OCR_ROUTING_KEY, payload);
-                outbox.setPublishedAt(Instant.now());
+                outbox = new OutboxEntity(UUID.randomUUID(), RabbitConfig.OCR_ROUTING_KEY, payload);
                 outboxRepository.save(outbox);
             } catch (JsonProcessingException e) {
                 log.error("Failed to serialize outbox message for batch: {}", batch.getId(), e);
             }
 
-            rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE_NAME, RabbitConfig.OCR_ROUTING_KEY, message);
-            log.info("Dispatched OCR batch message for batchId: {}, pageRange: {}", batch.getId(), batch.getPageRange());
+            try {
+                rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE_NAME, RabbitConfig.OCR_ROUTING_KEY, message);
+                if (outbox != null) {
+                    outbox.setPublishedAt(Instant.now());
+                    outboxRepository.save(outbox);
+                }
+                log.info("Dispatched OCR batch message for batchId: {}, pageRange: {}", batch.getId(), batch.getPageRange());
+            } catch (Exception e) {
+                log.warn("RabbitMQ immediate dispatch failed for batchId: {}. Outbox poller will retry. Error: {}", batch.getId(), e.getMessage());
+            }
         }
 
         eventService.emitProgress(documentId, null, "UPLOAD", "COMPLETED", 
@@ -228,6 +236,73 @@ public class DocumentIngestionService {
                     doc.getUpdatedAt()
             );
         });
+    }
+
+    @Transactional
+    public Optional<DocumentDetailResponse> retryFailedStages(UUID documentId) {
+        Optional<DocumentEntity> docOpt = documentRepository.findById(documentId);
+        if (docOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        DocumentEntity doc = docOpt.get();
+
+        // 1. Retry any failed OCR batches
+        List<OcrBatchEntity> batches = ocrBatchRepository.findByDocumentId(documentId);
+        for (OcrBatchEntity batch : batches) {
+            if ("FAILED".equalsIgnoreCase(batch.getStatus())) {
+                batch.setStatus("PENDING");
+                batch.setSarvamJobId(null);
+                batch.setPollCount(0);
+                batch.setNextPollAt(null);
+                ocrBatchRepository.save(batch);
+
+                String storageKey = "documents/" + documentId + "/batches/batch_" + batch.getPageRange() + ".pdf";
+                OcrBatchMessage msg = new OcrBatchMessage(
+                        batch.getId(), documentId, batch.getPageRange(), storageKey, doc.getLanguage()
+                );
+                rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE_NAME, RabbitConfig.OCR_ROUTING_KEY, msg);
+                log.info("Re-dispatched failed OCR batch {} for document {}", batch.getId(), documentId);
+            }
+        }
+
+        // 2. Retry any failed pages
+        List<PageEntity> pages = pageRepository.findByDocumentIdOrderByPageNoAsc(documentId);
+        for (PageEntity page : pages) {
+            if ("FAILED".equalsIgnoreCase(page.getStatus())) {
+                if (page.getOriginalText() != null && !page.getOriginalText().isBlank()) {
+                    if (page.getTranslatedText() == null || page.getTranslatedText().isBlank()) {
+                        // Failed at Translate
+                        page.setStatus("OCR_DONE");
+                        pageRepository.save(page);
+                        com.chitthi.messaging.dto.PageTranslateMessage msg = new com.chitthi.messaging.dto.PageTranslateMessage(
+                                page.getId(), documentId, page.getPageNo(), doc.getLanguage(), page.getTextHash()
+                        );
+                        rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE_NAME, RabbitConfig.TRANSLATE_ROUTING_KEY, msg);
+                        log.info("Re-dispatched failed translation for page {} of doc {}", page.getPageNo(), documentId);
+                    } else {
+                        // Failed at TTS
+                        page.setStatus("TRANSLATED");
+                        pageRepository.save(page);
+                        com.chitthi.messaging.dto.PageTtsMessage msg = new com.chitthi.messaging.dto.PageTtsMessage(
+                                page.getId(), documentId, page.getPageNo(), doc.getLanguage(), page.getTextHash()
+                        );
+                        rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE_NAME, RabbitConfig.TTS_ROUTING_KEY, msg);
+                        log.info("Re-dispatched failed TTS for page {} of doc {}", page.getPageNo(), documentId);
+                    }
+                } else {
+                    // Failed at OCR, will be picked up when OCR batch runs
+                    page.setStatus("PENDING");
+                    pageRepository.save(page);
+                }
+            }
+        }
+
+        doc.setStatus("PROCESSING");
+        documentRepository.save(doc);
+
+        eventService.emitProgress(documentId, null, "RETRY", "RUNNING", "Manual retry initiated for failed stages");
+
+        return getDocument(documentId);
     }
 
     @Transactional(readOnly = true)
