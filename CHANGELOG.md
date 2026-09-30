@@ -9,12 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Planned
-- Multi-page PDF ingestion controller and Apache PDFBox splitting worker.
-- Scheduled status poller for Sarvam Document AI digitise ZIP downloads.
-- Sentence-boundary chunking translation and TTS workers with Bulbul v3.
-- Audio assembler and FFmpeg stitcher for full-letter voice playback.
-- Real-time Server-Sent Events (SSE) pipeline event stream.
+### Added
+- **Archivist Edit Flow (`FR8`, `US3`, `US7`):** Added `PUT /api/documents/{id}/pages/{n}/text` endpoint allowing archivists to correct transcription mistakes directly from the web reader or REST API.
+- **Partial Invalidation & Selective Re-Assembly:** Editing page $N$ invalidates only page $N$ (`status = OCR_DONE`, `translated_text = null`), re-queueing only translation and TTS while untouched pages remain intact. Upon TTS completion, `AudioAssemblerWorker` re-stitches the full letter audio using cached page WAVs.
+- **TTS Output Cache by Text Hash (`FR13`):** Caches synthesized Bulbul WAV audio in MinIO under `cache/tts/{sha256(text:lang)}.wav`. Cache hits reuse audio with 0 paid external API calls and ₹0 ledger cost.
+- **Interactive Web Reader In-Browser Editor:** Added an inline editor toggle on the Indic reader pane with instant preview, partial regeneration banner, and dynamic status updates.
+- **Reliability & Resilience:** Transactional outbox publisher (`OutboxPublisherService`), deterministic idempotency key enforcement across all workers, Resilience4j rate limiting (10 req/min for Vision) and circuit breaking, RabbitMQ exponential backoff retry with `RepublishMessageRecoverer`, Dead Letter Queue (`DeadLetterWorker`), and manual retry API (`POST /api/documents/{id}/retry`).
 
 ---
 

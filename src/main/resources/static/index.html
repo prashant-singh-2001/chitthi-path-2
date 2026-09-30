@@ -379,10 +379,35 @@
                             </div>
                             <img id="scannedImage" class="scanned-image hidden" alt="Original Scanned Handwritten Page" />
                         </div>
-                        <!-- Transcribed Indic Text Box -->
+                        <!-- Transcribed Indic Text Box with Human-in-the-Loop Edit Flow -->
                         <div class="transcribed-text-box" id="transcribedBox">
-                            <div class="sub-header">Transcribed Indic Text (Sarvam OCR)</div>
+                            <div class="transcribed-header-row">
+                                <div class="sub-header">Transcribed Indic Text (Sarvam OCR)</div>
+                                <button class="btn-text-edit" id="btnToggleEdit" title="Edit OCR transcription">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M12 20h9"></path>
+                                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                                    </svg>
+                                    <span id="btnEditTextLabel">Edit Text</span>
+                                </button>
+                            </div>
                             <p class="indic-text-content" id="indicTextDisplay">OCR transcription will appear here once processed.</p>
+
+                            <!-- Inline Edit Mode -->
+                            <div class="indic-edit-container hidden" id="indicEditContainer">
+                                <div class="edit-banner">
+                                    <span class="edit-banner-icon">⚡</span>
+                                    <span><strong>Partial Regeneration:</strong> Only this page will be re-translated and synthesized. Other pages remain untouched.</span>
+                                </div>
+                                <textarea id="indicTextEditInput" class="indic-text-textarea" rows="4" placeholder="Correct Indic handwriting transcription..."></textarea>
+                                <div class="edit-actions">
+                                    <button class="btn btn-secondary btn-sm" id="btnCancelEdit" type="button">Cancel</button>
+                                    <button class="btn btn-primary btn-sm" id="btnSaveEdit" type="button">
+                                        <span id="btnSaveEditText">Save & Regenerate Audio</span>
+                                        <div class="spinner hidden" id="editSpinner"></div>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

@@ -57,6 +57,29 @@ public class ObjectStorageService {
     }
 
     /**
+     * Check if an object exists in the configured bucket.
+     */
+    public boolean fileExists(String key) {
+        try {
+            HeadObjectRequest request = HeadObjectRequest.builder()
+                    .bucket(properties.bucket())
+                    .key(key)
+                    .build();
+            s3Client.headObject(request);
+            return true;
+        } catch (NoSuchKeyException e) {
+            return false;
+        } catch (S3Exception e) {
+            if (e.statusCode() == 404) {
+                return false;
+            }
+            throw e;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
      * Generate a presigned download URL for a key.
      */
     public String generatePresignedUrl(String key) {

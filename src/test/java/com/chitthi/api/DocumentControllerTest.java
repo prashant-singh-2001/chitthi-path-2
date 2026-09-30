@@ -172,5 +172,48 @@ class DocumentControllerTest {
                 .andExpect(jsonPath("$.id").value(docId.toString()))
                 .andExpect(jsonPath("$.status").value("PROCESSING"));
     }
+
+    @Test
+    void editPageText_whenValid_shouldReturnOkAndUpdatedDocument() throws Exception {
+        UUID docId = UUID.randomUUID();
+        PageSummaryResponse page1 = new PageSummaryResponse(
+                UUID.randomUUID(), 1, "OCR_DONE", true, "संशोधित पाठ", null, "http://presigned/page1.png"
+        );
+        DocumentDetailResponse doc = new DocumentDetailResponse(
+                docId, "default", "Grandfather Letter", "hi", "PROCESSING", 1974,
+                List.of("family"), List.of(page1), Instant.now(), Instant.now()
+        );
+        when(ingestionService.editPageText(docId, 1, "संशोधित पाठ")).thenReturn(Optional.of(doc));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/documents/" + docId + "/pages/1/text")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\": \"संशोधित पाठ\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(docId.toString()))
+                .andExpect(jsonPath("$.status").value("PROCESSING"))
+                .andExpect(jsonPath("$.pages[0].edited").value(true))
+                .andExpect(jsonPath("$.pages[0].originalText").value("संशोधित पाठ"));
+    }
+
+    @Test
+    void editPageText_whenNotFound_shouldReturn404() throws Exception {
+        UUID docId = UUID.randomUUID();
+        when(ingestionService.editPageText(docId, 1, "नया पाठ")).thenReturn(Optional.empty());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/documents/" + docId + "/pages/1/text")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\": \"नया पाठ\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void editPageText_whenBlankText_shouldReturnBadRequest() throws Exception {
+        UUID docId = UUID.randomUUID();
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/documents/" + docId + "/pages/1/text")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"text\": \"   \"}"))
+                .andExpect(status().isBadRequest());
+    }
 }
 

@@ -3,8 +3,10 @@ package com.chitthi.api;
 import com.chitthi.api.dto.DocumentDetailResponse;
 import com.chitthi.api.dto.DocumentUploadRequest;
 import com.chitthi.api.dto.DocumentUploadResponse;
+import com.chitthi.api.dto.PageTextEditRequest;
 import com.chitthi.service.DocumentIngestionService;
 import com.chitthi.service.DocumentProgressEventService;
+import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -103,6 +105,20 @@ public class DocumentController {
     @PostMapping("/{id}/retry")
     public ResponseEntity<DocumentDetailResponse> retryDocument(@PathVariable("id") UUID id) {
         return ingestionService.retryFailedStages(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Edit transcribed Indic page text. Partially invalidates only that page,
+     * re-queueing translation and TTS while leaving untouched pages intact.
+     */
+    @PutMapping("/{id}/pages/{n}/text")
+    public ResponseEntity<DocumentDetailResponse> editPageText(
+            @PathVariable("id") UUID id,
+            @PathVariable("n") int pageNo,
+            @Valid @RequestBody PageTextEditRequest request) {
+        return ingestionService.editPageText(id, pageNo, request.text())
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }

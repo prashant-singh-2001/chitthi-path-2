@@ -159,6 +159,27 @@ public class TtsWorker {
     }
 
     private void generateAndSaveAudio(String text, String languageCode, UUID documentId, int pageNo, String langSuffix) {
+        String targetStorageKey = "documents/" + documentId + "/audio/page_" + pageNo + "_" + langSuffix + ".wav";
+        String contentHash = com.chitthi.util.IdempotencyUtils.sha256Hex(text.trim() + ":" + languageCode.toLowerCase());
+        String cacheStorageKey = "cache/tts/" + contentHash + ".wav";
+
+        // FR13: Check TTS cache by text hash
+        if (objectStorageService.fileExists(cacheStorageKey)) {
+            try {
+                byte[] cachedAudioBytes = objectStorageService.downloadFile(cacheStorageKey);
+                if (cachedAudioBytes != null && cachedAudioBytes.length > 0) {
+                    objectStorageService.uploadFile(targetStorageKey, cachedAudioBytes, "audio/wav");
+                    log.info("TTS Cache HIT for cacheKey: {}. Reused {} bytes for page {} ({}) with 0 duplicate API calls",
+                            cacheStorageKey, cachedAudioBytes.length, pageNo, langSuffix);
+                    return;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to retrieve cached TTS audio from {}. Falling back to Sarvam Bulbul synthesis: {}",
+                        cacheStorageKey, e.getMessage());
+            }
+        }
+
+        // Cache MISS: Synthesize via Sarvam Bulbul
         List<String> chunks = textChunkingService.chunkText(text, MAX_TTS_CHARS_PER_CHUNK);
         List<byte[]> audioChunks = new ArrayList<>();
 
@@ -193,9 +214,16 @@ public class TtsWorker {
 
         if (!audioChunks.isEmpty()) {
             byte[] pageAudioBytes = audioStitcherService.concatenateWavFiles(audioChunks);
-            String storageKey = "documents/" + documentId + "/audio/page_" + pageNo + "_" + langSuffix + ".wav";
-            objectStorageService.uploadFile(storageKey, pageAudioBytes, "audio/wav");
-            log.info("Saved page audio to {} (size = {} bytes)", storageKey, pageAudioBytes.length);
+            objectStorageService.uploadFile(targetStorageKey, pageAudioBytes, "audio/wav");
+            log.info("Saved page audio to {} (size = {} bytes)", targetStorageKey, pageAudioBytes.length);
+
+            // Populate TTS cache by text hash
+            try {
+                objectStorageService.uploadFile(cacheStorageKey, pageAudioBytes, "audio/wav");
+                log.info("Populated TTS cache with key: {} (size = {} bytes)", cacheStorageKey, pageAudioBytes.length);
+            } catch (Exception e) {
+                log.warn("Failed to populate TTS cache for key {}: {}", cacheStorageKey, e.getMessage());
+            }
         }
     }
 

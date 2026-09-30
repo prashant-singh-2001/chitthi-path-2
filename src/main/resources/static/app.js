@@ -87,6 +87,14 @@
         scannedImage: document.getElementById('scannedImage'),
         origPageMeta: document.getElementById('origPageMeta'),
         indicTextDisplay: document.getElementById('indicTextDisplay'),
+        btnToggleEdit: document.getElementById('btnToggleEdit'),
+        btnEditTextLabel: document.getElementById('btnEditTextLabel'),
+        indicEditContainer: document.getElementById('indicEditContainer'),
+        indicTextEditInput: document.getElementById('indicTextEditInput'),
+        btnCancelEdit: document.getElementById('btnCancelEdit'),
+        btnSaveEdit: document.getElementById('btnSaveEdit'),
+        btnSaveEditText: document.getElementById('btnSaveEditText'),
+        editSpinner: document.getElementById('editSpinner'),
         transPageMeta: document.getElementById('transPageMeta'),
         translationPlaceholder: document.getElementById('translationPlaceholder'),
         englishTextDisplay: document.getElementById('englishTextDisplay'),
@@ -482,6 +490,8 @@
         const doc = state.activeDoc;
         if (!doc || !doc.pages || doc.pages.length === 0) return;
 
+        closeEditMode();
+
         const totalPages = doc.pages.length;
         const page = doc.pages[state.currentPageIndex];
 
@@ -490,7 +500,11 @@
         el.btnPrevPage.disabled = state.currentPageIndex === 0;
         el.btnNextPage.disabled = state.currentPageIndex >= totalPages - 1;
 
-        el.origPageMeta.textContent = `Page ${page.pageNo} (${doc.language.toUpperCase()})`;
+        if (page.edited) {
+            el.origPageMeta.innerHTML = `Page ${page.pageNo} (${doc.language.toUpperCase()}) <span class="badge badge-amber" style="margin-left:6px; font-size:10px;">Edited</span>`;
+        } else {
+            el.origPageMeta.textContent = `Page ${page.pageNo} (${doc.language.toUpperCase()})`;
+        }
         el.transPageMeta.textContent = `Page ${page.pageNo} English Translation`;
 
         // Scanned Image
@@ -556,6 +570,113 @@
             const isHidden = el.eventLogList.style.display === 'none';
             el.eventLogList.style.display = isHidden ? 'flex' : 'none';
         });
+
+        // Setup Archivist Edit Flow
+        setupEditMode();
+    }
+
+    function setupEditMode() {
+        if (!el.btnToggleEdit) return;
+
+        el.btnToggleEdit.addEventListener('click', () => {
+            const doc = state.activeDoc;
+            if (!doc || !doc.pages || doc.pages.length === 0) {
+                showToast('Please open or upload a letter first', 'info');
+                return;
+            }
+
+            const page = doc.pages[state.currentPageIndex];
+            const isEditing = !el.indicEditContainer.classList.contains('hidden');
+
+            if (isEditing) {
+                closeEditMode();
+            } else {
+                openEditMode(page);
+            }
+        });
+
+        if (el.btnCancelEdit) {
+            el.btnCancelEdit.addEventListener('click', () => {
+                closeEditMode();
+            });
+        }
+
+        if (el.btnSaveEdit) {
+            el.btnSaveEdit.addEventListener('click', async () => {
+                const doc = state.activeDoc;
+                if (!doc || !doc.pages || doc.pages.length === 0) return;
+
+                const page = doc.pages[state.currentPageIndex];
+                const newText = el.indicTextEditInput.value.trim();
+
+                if (!newText) {
+                    showToast('Text content cannot be empty', 'error');
+                    el.indicTextEditInput.focus();
+                    return;
+                }
+
+                if (newText === (page.originalText || '').trim()) {
+                    showToast('No changes detected in transcription', 'info');
+                    closeEditMode();
+                    return;
+                }
+
+                // Begin save & partial regeneration
+                el.btnSaveEdit.disabled = true;
+                el.btnCancelEdit.disabled = true;
+                el.editSpinner.classList.remove('hidden');
+                el.btnSaveEditText.textContent = 'Saving...';
+
+                try {
+                    const res = await fetch(`/api/documents/${doc.id}/pages/${page.pageNo}/text`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: newText })
+                    });
+
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.message || `HTTP ${res.status}`);
+                    }
+
+                    const updatedDoc = await res.json();
+                    state.activeDoc = updatedDoc;
+
+                    closeEditMode();
+                    renderCurrentPage();
+
+                    // Connect to SSE stream to monitor live regeneration
+                    connectSse(doc.id, doc.title);
+                    updateTrackerStatus('PROCESSING');
+
+                    showToast(`Page ${page.pageNo} updated! Regenerating translation & speech...`, 'success');
+                } catch (err) {
+                    console.error('Failed to save page edit:', err);
+                    showToast(`Failed to update page: ${err.message}`, 'error');
+                } finally {
+                    el.btnSaveEdit.disabled = false;
+                    el.btnCancelEdit.disabled = false;
+                    el.editSpinner.classList.add('hidden');
+                    el.btnSaveEditText.textContent = 'Save & Regenerate Audio';
+                }
+            });
+        }
+    }
+
+    function openEditMode(page) {
+        if (!el.indicEditContainer) return;
+        el.indicTextEditInput.value = page.originalText || '';
+        el.indicEditContainer.classList.remove('hidden');
+        el.indicTextDisplay.classList.add('hidden');
+        if (el.btnEditTextLabel) el.btnEditTextLabel.textContent = 'Cancel Edit';
+        el.indicTextEditInput.focus();
+    }
+
+    function closeEditMode() {
+        if (!el.indicEditContainer) return;
+        el.indicEditContainer.classList.add('hidden');
+        el.indicTextDisplay.classList.remove('hidden');
+        if (el.btnEditTextLabel) el.btnEditTextLabel.textContent = 'Edit Text';
     }
 
     /* ==========================================================================

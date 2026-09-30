@@ -305,6 +305,71 @@ public class DocumentIngestionService {
         return getDocument(documentId);
     }
 
+    @Transactional
+    public Optional<DocumentDetailResponse> editPageText(UUID documentId, int pageNo, String newText) {
+        if (newText == null || newText.isBlank()) {
+            throw new IllegalArgumentException("Edited text cannot be empty or blank");
+        }
+
+        Optional<DocumentEntity> docOpt = documentRepository.findById(documentId);
+        if (docOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        DocumentEntity doc = docOpt.get();
+
+        Optional<PageEntity> pageOpt = pageRepository.findByDocumentIdAndPageNo(documentId, pageNo);
+        if (pageOpt.isEmpty()) {
+            return Optional.empty();
+        }
+        PageEntity page = pageOpt.get();
+
+        String trimmedText = newText.trim();
+        String newHash = com.chitthi.util.IdempotencyUtils.sha256Hex(trimmedText);
+
+        page.setOriginalText(trimmedText);
+        page.setTextHash(newHash);
+        page.setEdited(true);
+        page.setStatus("OCR_DONE");
+        page.setTranslatedText(null);
+        pageRepository.save(page);
+
+        doc.setStatus("PROCESSING");
+        documentRepository.save(doc);
+
+        com.chitthi.messaging.dto.PageTranslateMessage translateMessage = new com.chitthi.messaging.dto.PageTranslateMessage(
+                page.getId(),
+                documentId,
+                pageNo,
+                doc.getLanguage(),
+                newHash
+        );
+
+        OutboxEntity outbox = null;
+        try {
+            String payload = objectMapper.writeValueAsString(translateMessage);
+            outbox = new OutboxEntity(UUID.randomUUID(), RabbitConfig.TRANSLATE_ROUTING_KEY, payload);
+            outboxRepository.save(outbox);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize outbox message for edited page: {}", page.getId(), e);
+        }
+
+        try {
+            rabbitTemplate.convertAndSend(RabbitConfig.EXCHANGE_NAME, RabbitConfig.TRANSLATE_ROUTING_KEY, translateMessage);
+            if (outbox != null) {
+                outbox.setPublishedAt(Instant.now());
+                outboxRepository.save(outbox);
+            }
+            log.info("Dispatched translate message for edited page {} of doc {}", pageNo, documentId);
+        } catch (Exception e) {
+            log.warn("Immediate dispatch failed for edited page {}. Outbox poller will retry: {}", pageNo, e.getMessage());
+        }
+
+        eventService.emitProgress(documentId, pageNo, "EDIT", "COMPLETED",
+                "Archivist edited text for page " + pageNo + "; translation and audio regeneration initiated");
+
+        return getDocument(documentId);
+    }
+
     @Transactional(readOnly = true)
     public List<DocumentDetailResponse> listDocuments(String ownerId) {
         String effectiveOwner = (ownerId != null && !ownerId.isBlank()) ? ownerId : "default";

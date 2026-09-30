@@ -136,4 +136,65 @@ class TtsWorkerTest {
         verifyNoInteractions(sarvamClient);
         verifyNoInteractions(objectStorageService);
     }
+
+    @Test
+    void processPageTts_whenTtsCached_shouldReuseAudioWithoutCallingSarvam() {
+        UUID docId = UUID.randomUUID();
+        UUID pageId = UUID.randomUUID();
+        DocumentEntity doc = new DocumentEntity(docId, "user1", "Letter", "hi", "PROCESSING", "[]", 1987);
+        PageEntity page = new PageEntity(pageId, doc, 1, "doc/page_1.png", "TRANSLATED");
+        page.setOriginalText("नमस्ते नानाजी");
+        page.setTranslatedText("Hello Nanaji");
+
+        PageTtsMessage message = new PageTtsMessage(pageId, docId, 1, "hi", "hash123");
+
+        byte[] cachedWavBytes = AudioStitcherService.createDummyWav(40, 22050);
+
+        when(pageRepository.findById(pageId)).thenReturn(Optional.of(page));
+        when(objectStorageService.fileExists(anyString())).thenReturn(true);
+        when(objectStorageService.downloadFile(anyString())).thenReturn(cachedWavBytes);
+        when(pageRepository.findByDocumentIdOrderByPageNoAsc(docId)).thenReturn(List.of(page));
+
+        ttsWorker.processPageTts(message);
+
+        assertThat(page.getStatus()).isEqualTo("AUDIO_DONE");
+        // Crucial verification: zero calls to external paid Sarvam TTS API
+        verifyNoInteractions(sarvamClient);
+        // Zero cost recorded in the usage ledger
+        verifyNoInteractions(apiCallRepository);
+
+        // Uploaded from cached bytes to page audio destinations
+        verify(objectStorageService).uploadFile(contains("page_1_en.wav"), eq(cachedWavBytes), eq("audio/wav"));
+        verify(objectStorageService).uploadFile(contains("page_1_orig.wav"), eq(cachedWavBytes), eq("audio/wav"));
+    }
+
+    @Test
+    void processPageTts_whenNotCached_shouldCallSarvamAndPopulateCache() {
+        UUID docId = UUID.randomUUID();
+        UUID pageId = UUID.randomUUID();
+        DocumentEntity doc = new DocumentEntity(docId, "user1", "Letter", "hi", "PROCESSING", "[]", 1987);
+        PageEntity page = new PageEntity(pageId, doc, 1, "doc/page_1.png", "TRANSLATED");
+        page.setOriginalText("नमस्ते");
+        page.setTranslatedText("Hello");
+
+        PageTtsMessage message = new PageTtsMessage(pageId, docId, 1, "hi", "hash123");
+        byte[] freshWavBytes = AudioStitcherService.createDummyWav(60, 22050);
+        String base64Wav = Base64.getEncoder().encodeToString(freshWavBytes);
+
+        when(pageRepository.findById(pageId)).thenReturn(Optional.of(page));
+        when(objectStorageService.fileExists(anyString())).thenReturn(false);
+        when(textChunkingService.chunkText(anyString(), anyInt()))
+                .thenAnswer(inv -> Collections.singletonList(inv.getArgument(0, String.class)));
+        when(sarvamClient.textToSpeech(anyList(), anyString()))
+                .thenReturn(new TtsResponse(List.of(base64Wav)));
+        when(audioStitcherService.concatenateWavFiles(anyList())).thenReturn(freshWavBytes);
+        when(pageRepository.findByDocumentIdOrderByPageNoAsc(docId)).thenReturn(List.of(page));
+
+        ttsWorker.processPageTts(message);
+
+        assertThat(page.getStatus()).isEqualTo("AUDIO_DONE");
+        verify(sarvamClient, atLeastOnce()).textToSpeech(anyList(), anyString());
+        // Verify cache was populated for subsequent calls
+        verify(objectStorageService, atLeastOnce()).uploadFile(startsWith("cache/tts/"), eq(freshWavBytes), eq("audio/wav"));
+    }
 }
