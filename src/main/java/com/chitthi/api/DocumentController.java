@@ -96,4 +96,14 @@ public class DocumentController {
     public SseEmitter streamDocumentEvents(@PathVariable("id") UUID id) {
         return eventService.registerEmitter(id);
     }
+
+    /**
+     * Manually retry failed or dead-lettered stages for a document.
+     */
+    @PostMapping("/{id}/retry")
+    public ResponseEntity<DocumentDetailResponse> retryDocument(@PathVariable("id") UUID id) {
+        return ingestionService.retryFailedStages(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
 }

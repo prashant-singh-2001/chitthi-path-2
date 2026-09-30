@@ -34,6 +34,15 @@ spring:
     port: ${SPRING_RABBITMQ_PORT:5673}
     username: ${SPRING_RABBITMQ_USERNAME:chitthi}
     password: ${SPRING_RABBITMQ_PASSWORD:chitthi}
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          initial-interval: 1000ms
+          max-attempts: 3
+          multiplier: 2.0
+          max-interval: 10000ms
 
   servlet:
     multipart:

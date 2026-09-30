@@ -120,4 +120,38 @@ class SarvamClientWireMockTest {
         wireMockServer.verify(postRequestedFor(urlEqualTo("/text-to-speech"))
                 .withHeader("api-subscription-key", equalTo("test-api-key-123")));
     }
+
+    @Test
+    void testTranslate_whenRateLimited429_shouldThrowTooManyRequests() {
+        wireMockServer.stubFor(post(urlEqualTo("/translate"))
+                .willReturn(aResponse()
+                        .withHeader("Content-Type", "application/json")
+                        .withHeader("Retry-After", "10")
+                        .withBody("{\"error\":\"Rate limit exceeded\"}")
+                        .withStatus(429)));
+
+        TranslateRequest request = TranslateRequest.toEnglish("नमस्ते", "hi-IN");
+
+        org.springframework.web.client.HttpClientErrorException ex = assertThrows(
+                org.springframework.web.client.HttpClientErrorException.class,
+                () -> sarvamClient.translate(request)
+        );
+        assertEquals(429, ex.getStatusCode().value());
+    }
+
+    @Test
+    void testTranslate_whenServerError500_shouldThrowHttpServerError() {
+        wireMockServer.stubFor(post(urlEqualTo("/translate"))
+                .willReturn(aResponse()
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":\"Internal Server Error\"}")
+                        .withStatus(500)));
+
+        TranslateRequest request = TranslateRequest.toEnglish("नमस्ते", "hi-IN");
+
+        assertThrows(
+                org.springframework.web.client.HttpServerErrorException.class,
+                () -> sarvamClient.translate(request)
+        );
+    }
 }

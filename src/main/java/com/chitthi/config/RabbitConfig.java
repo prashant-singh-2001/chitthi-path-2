@@ -107,4 +107,9 @@ public class RabbitConfig {
         template.setMessageConverter(jsonMessageConverter());
         return template;
     }
+
+    @Bean
+    public org.springframework.amqp.rabbit.retry.MessageRecoverer messageRecoverer(RabbitTemplate rabbitTemplate) {
+        return new org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer(rabbitTemplate, DEAD_LETTER_EXCHANGE, DLQ_ROUTING_KEY);
+    }
 }

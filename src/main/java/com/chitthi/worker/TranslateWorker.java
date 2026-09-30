@@ -71,7 +71,15 @@ public class TranslateWorker {
 
         PageEntity page = pageOpt.get();
 
-        // Idempotency check: if page already translated, skip paid API call
+        String idempotencyKey = com.chitthi.util.IdempotencyUtils.buildKey("TRANSLATE", message.documentId(), message.pageNo(), message.textHash());
+        Optional<StageTaskEntity> existingTask = stageTaskRepository.findByIdempotencyKey(idempotencyKey);
+        if (existingTask.isPresent() && "COMPLETED".equalsIgnoreCase(existingTask.get().getStatus())) {
+            log.info("StageTask with key {} already COMPLETED, skipping duplicate translation call", idempotencyKey);
+            dispatchTts(message);
+            return;
+        }
+
+        // Status check: if page already translated, skip paid API call
         if ("TRANSLATED".equalsIgnoreCase(page.getStatus()) || 
             "AUDIO_DONE".equalsIgnoreCase(page.getStatus()) || 
             "INDEXED".equalsIgnoreCase(page.getStatus())) {
@@ -129,7 +137,6 @@ public class TranslateWorker {
             pageRepository.save(page);
 
             // Record stage task idempotency
-            String idempotencyKey = page.getId() + ":TRANSLATE:" + message.textHash();
             StageTaskEntity stageTask = new StageTaskEntity(
                     UUID.randomUUID(),
                     page,

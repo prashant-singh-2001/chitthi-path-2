@@ -157,5 +157,20 @@ class DocumentControllerTest {
                 .andExpect(jsonPath("$[0].pageNo").value(1))
                 .andExpect(jsonPath("$[0].matchType").value("INDIC_TRIGRAM"));
     }
+
+    @Test
+    void retryDocument_shouldReturnUpdatedDocument() throws Exception {
+        UUID docId = UUID.randomUUID();
+        DocumentDetailResponse doc = new DocumentDetailResponse(
+                docId, "default", "Grandfather Letter", "hi", "PROCESSING", 1974,
+                List.of("family"), List.of(), Instant.now(), Instant.now()
+        );
+        when(ingestionService.retryFailedStages(docId)).thenReturn(Optional.of(doc));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/api/documents/" + docId + "/retry"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(docId.toString()))
+                .andExpect(jsonPath("$.status").value("PROCESSING"));
+    }
 }
 

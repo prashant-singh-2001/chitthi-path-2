@@ -2,6 +2,8 @@ package com.chitthi.client.sarvam;
 
 import com.chitthi.client.sarvam.dto.*;
 import com.chitthi.config.SarvamProperties;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ByteArrayResource;
@@ -42,6 +44,8 @@ public class SarvamClient {
     /**
      * Submit up to 10 pages for Document AI digitization.
      */
+    @CircuitBreaker(name = "sarvamApi")
+    @RateLimiter(name = "sarvamDocAi")
     public DigitiseJobResponse submitDigitiseJob(byte[] fileBytes, String filename, String languageCode) {
         log.info("Submitting Sarvam Document AI job for file: {}, language: {}", filename, languageCode);
 
@@ -88,6 +92,8 @@ public class SarvamClient {
     /**
      * Translate text from source Indic language to English.
      */
+    @CircuitBreaker(name = "sarvamApi")
+    @RateLimiter(name = "sarvamTranslate")
     public TranslateResponse translate(TranslateRequest request) {
         log.debug("Translating text (chars: {}) from {} to {}",
                 request.input() != null ? request.input().length() : 0,
@@ -105,6 +111,8 @@ public class SarvamClient {
     /**
      * Convert text to speech via Sarvam Bulbul.
      */
+    @CircuitBreaker(name = "sarvamApi")
+    @RateLimiter(name = "sarvamTts")
     public TtsResponse textToSpeech(TtsRequest request) {
         log.debug("Calling Bulbul TTS for language: {}, texts count: {}",
                 request.targetLanguageCode(),

@@ -82,7 +82,15 @@ public class TtsWorker {
 
         PageEntity page = pageOpt.get();
 
-        // Idempotency check: if already AUDIO_DONE or INDEXED, check document assembly
+        String idempotencyKey = com.chitthi.util.IdempotencyUtils.buildKey("TTS", message.documentId(), message.pageNo(), message.textHash());
+        Optional<StageTaskEntity> existingTask = stageTaskRepository.findByIdempotencyKey(idempotencyKey);
+        if (existingTask.isPresent() && "COMPLETED".equalsIgnoreCase(existingTask.get().getStatus())) {
+            log.info("StageTask with key {} already COMPLETED, skipping duplicate TTS call", idempotencyKey);
+            checkAndTriggerAssembly(message.documentId());
+            return;
+        }
+
+        // Status check: if already AUDIO_DONE or INDEXED, check document assembly
         if ("AUDIO_DONE".equalsIgnoreCase(page.getStatus()) || "INDEXED".equalsIgnoreCase(page.getStatus())) {
             log.info("Page {} is already in status {}, skipping duplicate TTS call", page.getId(), page.getStatus());
             checkAndTriggerAssembly(message.documentId());
@@ -124,7 +132,6 @@ public class TtsWorker {
             pageRepository.save(page);
 
             // 4. Record stage task idempotency
-            String idempotencyKey = page.getId() + ":TTS:" + message.textHash();
             StageTaskEntity stageTask = new StageTaskEntity(
                     UUID.randomUUID(),
                     page,
