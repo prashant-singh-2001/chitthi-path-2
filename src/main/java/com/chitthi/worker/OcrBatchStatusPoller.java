@@ -46,6 +46,7 @@ public class OcrBatchStatusPoller {
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
     private final DocumentProgressEventService eventService;
+    private final com.chitthi.service.UsageLedgerService usageLedgerService;
 
     public OcrBatchStatusPoller(OcrBatchRepository ocrBatchRepository,
                                PageRepository pageRepository,
@@ -56,6 +57,20 @@ public class OcrBatchStatusPoller {
                                RabbitTemplate rabbitTemplate,
                                ObjectMapper objectMapper,
                                DocumentProgressEventService eventService) {
+        this(ocrBatchRepository, pageRepository, documentRepository, stageTaskRepository,
+                sarvamClient, sarvamProperties, rabbitTemplate, objectMapper, eventService, null);
+    }
+
+    public OcrBatchStatusPoller(OcrBatchRepository ocrBatchRepository,
+                               PageRepository pageRepository,
+                               DocumentRepository documentRepository,
+                               StageTaskRepository stageTaskRepository,
+                               SarvamClient sarvamClient,
+                               SarvamProperties sarvamProperties,
+                               RabbitTemplate rabbitTemplate,
+                               ObjectMapper objectMapper,
+                               DocumentProgressEventService eventService,
+                               com.chitthi.service.UsageLedgerService usageLedgerService) {
         this.ocrBatchRepository = ocrBatchRepository;
         this.pageRepository = pageRepository;
         this.documentRepository = documentRepository;
@@ -65,6 +80,7 @@ public class OcrBatchStatusPoller {
         this.rabbitTemplate = rabbitTemplate;
         this.objectMapper = objectMapper;
         this.eventService = eventService;
+        this.usageLedgerService = usageLedgerService;
     }
 
     @Scheduled(fixedDelayString = "${sarvam.doc-ai-poll-interval-ms:5000}")
@@ -128,6 +144,8 @@ public class OcrBatchStatusPoller {
             }
         }
 
+        String ownerId = batch.getDocument().getOwnerId();
+
         for (PageEntity page : pages) {
             String text = extractedPageTexts.getOrDefault(page.getPageNo(), "");
             String textHash = calculateSha256(text);
@@ -147,6 +165,27 @@ public class OcrBatchStatusPoller {
                     "COMPLETED"
             );
             stageTaskRepository.save(stageTask);
+
+            // FR15: Count words and verify daily word cap before dispatching downstream
+            if (usageLedgerService != null) {
+                int pageWords = usageLedgerService.countWords(text);
+                usageLedgerService.recordWordsProcessed(pageWords);
+
+                int dailyWords = usageLedgerService.getDailyWordsProcessed(ownerId);
+                if (dailyWords > usageLedgerService.getDailyWordCap()) {
+                    log.warn("Page {} of doc {} halted: owner '{}' exceeded daily word cap (current: {} words, cap: {})",
+                            page.getPageNo(), batch.getDocument().getId(), ownerId, dailyWords, usageLedgerService.getDailyWordCap());
+                    page.setStatus("CAPPED");
+                    pageRepository.save(page);
+
+                    batch.getDocument().setStatus("PARTIAL");
+                    documentRepository.save(batch.getDocument());
+
+                    eventService.emitProgress(batch.getDocument().getId(), page.getPageNo(), "OCR", "FAILED",
+                            "Page " + page.getPageNo() + " paused: reached daily limit of 7,000 words");
+                    continue;
+                }
+            }
 
             // Dispatch to translate queue
             PageTranslateMessage translateMessage = new PageTranslateMessage(

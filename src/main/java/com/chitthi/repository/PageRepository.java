@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,6 +19,12 @@ public interface PageRepository extends JpaRepository<PageEntity, UUID> {
     List<PageEntity> findByDocumentIdAndPageNoBetweenOrderByPageNoAsc(UUID documentId, Integer startPage, Integer endPage);
 
     Optional<PageEntity> findByDocumentIdAndPageNo(UUID documentId, Integer pageNo);
+
+    /**
+     * Find pages updated for a specific owner since a timestamp (used for daily word cap calculations).
+     */
+    @Query("SELECT p FROM PageEntity p JOIN p.document d WHERE d.ownerId = :ownerId AND p.updatedAt >= :since AND p.originalText IS NOT NULL")
+    List<PageEntity> findPagesByOwnerSince(@Param("ownerId") String ownerId, @Param("since") Instant since);
 
     /**
      * Trigram fuzzy search across original Indic script scoped to document owner.

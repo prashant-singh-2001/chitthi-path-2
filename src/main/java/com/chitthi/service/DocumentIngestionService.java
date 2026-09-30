@@ -40,6 +40,7 @@ public class DocumentIngestionService {
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
     private final DocumentProgressEventService eventService;
+    private final UsageLedgerService usageLedgerService;
 
     public DocumentIngestionService(DocumentRepository documentRepository,
                                   PageRepository pageRepository,
@@ -50,6 +51,20 @@ public class DocumentIngestionService {
                                   RabbitTemplate rabbitTemplate,
                                   ObjectMapper objectMapper,
                                   DocumentProgressEventService eventService) {
+        this(documentRepository, pageRepository, ocrBatchRepository, outboxRepository,
+                objectStorageService, pdfSplitterService, rabbitTemplate, objectMapper, eventService, null);
+    }
+
+    public DocumentIngestionService(DocumentRepository documentRepository,
+                                  PageRepository pageRepository,
+                                  OcrBatchRepository ocrBatchRepository,
+                                  OutboxRepository outboxRepository,
+                                  ObjectStorageService objectStorageService,
+                                  PdfSplitterService pdfSplitterService,
+                                  RabbitTemplate rabbitTemplate,
+                                  ObjectMapper objectMapper,
+                                  DocumentProgressEventService eventService,
+                                  UsageLedgerService usageLedgerService) {
         this.documentRepository = documentRepository;
         this.pageRepository = pageRepository;
         this.ocrBatchRepository = ocrBatchRepository;
@@ -59,15 +74,23 @@ public class DocumentIngestionService {
         this.rabbitTemplate = rabbitTemplate;
         this.objectMapper = objectMapper;
         this.eventService = eventService;
+        this.usageLedgerService = usageLedgerService;
     }
 
     @Transactional
     public DocumentUploadResponse ingestDocument(MultipartFile file, DocumentUploadRequest request) throws IOException {
         validateUploadFile(file);
 
-        UUID documentId = UUID.randomUUID();
         String ownerId = (request.ownerId() != null && !request.ownerId().isBlank())
                 ? request.ownerId() : "default-user";
+
+        // FR15: Reject new uploads if the owner has already exceeded their 7,000-word daily processing ceiling
+        if (usageLedgerService != null && usageLedgerService.isDailyCapExceeded(ownerId)) {
+            int currentWords = usageLedgerService.getDailyWordsProcessed(ownerId);
+            throw new com.chitthi.exception.DailyWordCapExceededException(ownerId, currentWords, usageLedgerService.getDailyWordCap());
+        }
+
+        UUID documentId = UUID.randomUUID();
 
         String originalFilename = file.getOriginalFilename() != null ? file.getOriginalFilename() : "document";
         String extension = getFileExtension(originalFilename);

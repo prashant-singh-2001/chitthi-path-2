@@ -39,6 +39,15 @@
                 <input type="text" id="ownerIdInput" value="default" placeholder="User ID" class="owner-input" />
             </div>
 
+            <!-- Usage & Quota Drawer Toggle -->
+            <button class="btn btn-secondary" id="btnToggleUsage" title="View Daily Word Cap, Spend Ledger & Observability">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+                <span>Usage & Quota</span>
+            </button>
+
             <!-- Archive Drawer Toggle -->
             <button class="btn btn-secondary" id="btnToggleArchive" title="Open Letter Archive & Trigram Search">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -480,6 +489,139 @@
             <div class="drawer-section-title" id="drawerListHeader">Recent Letters</div>
             <div class="letter-list" id="archiveLetterList">
                 <div class="drawer-empty">Loading indexed letters...</div>
+            </div>
+        </div>
+    </aside>
+    
+    <!-- Slide-Out Usage Ledger & Observability Drawer -->
+    <aside class="archive-drawer usage-drawer" id="usageDrawer">
+        <div class="drawer-header">
+            <div>
+                <h3 class="drawer-title">Usage Ledger & Observability</h3>
+                <p class="drawer-subtitle">Daily word ceiling (FR15), Sarvam AI spend & Prometheus metrics</p>
+            </div>
+            <div class="drawer-header-actions">
+                <button class="btn btn-secondary btn-sm" id="btnRefreshUsage" title="Refresh usage data">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M23 4v6h-6"></path>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                    </svg>
+                    <span>Refresh</span>
+                </button>
+                <button class="drawer-close-btn" id="btnCloseUsage" title="Close Drawer">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="drawer-body">
+            <!-- 1. Daily Word Cap Section (FR15) -->
+            <div class="usage-section">
+                <div class="usage-section-header">
+                    <span class="drawer-section-title">Daily Word Cap (FR15)</span>
+                    <span class="badge" id="quotaBadge">Calculating...</span>
+                </div>
+                <div class="quota-card">
+                    <div class="quota-meta">
+                        <div>
+                            <div class="quota-metric-large" id="usageWordsText">0 / 7,000</div>
+                            <div class="quota-label">words processed today (UTC)</div>
+                        </div>
+                        <div class="quota-pct" id="usageWordsPercent">0%</div>
+                    </div>
+                    <div class="quota-progress-track">
+                        <div class="quota-progress-bar" id="usageProgressBar" style="width: 0%"></div>
+                    </div>
+                    <p class="quota-hint">
+                        <strong>Policy:</strong> Enforced per owner ID. Ingestion halts at upload and post-OCR before translation/TTS to prevent unexpected API costs.
+                    </p>
+                </div>
+            </div>
+
+            <!-- 2. Cost & Spend Summary (FR10) -->
+            <div class="usage-section">
+                <span class="drawer-section-title">Sarvam AI API Spend (FR10)</span>
+                <div class="stat-cards-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon-amber">₹</div>
+                        <div class="stat-card-body">
+                            <span class="stat-val" id="usageTotalSpend">₹0.00</span>
+                            <span class="stat-name">Total Spend</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon-blue">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                            </svg>
+                        </div>
+                        <div class="stat-card-body">
+                            <span class="stat-val" id="usageTotalCalls">0</span>
+                            <span class="stat-name">API Calls</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon-emerald">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            </svg>
+                        </div>
+                        <div class="stat-card-body">
+                            <span class="stat-val" id="usageCacheHits">0</span>
+                            <span class="stat-name">TTS Cache Hits</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Endpoint Breakdown Table -->
+            <div class="usage-section">
+                <span class="drawer-section-title">Per-Endpoint Breakdown</span>
+                <div class="usage-table-container">
+                    <table class="usage-table">
+                        <thead>
+                            <tr>
+                                <th>Endpoint</th>
+                                <th>Calls</th>
+                                <th>Units</th>
+                                <th>Cost (₹)</th>
+                                <th>Avg Latency</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usageEndpointBody">
+                            <tr>
+                                <td colspan="5" class="table-empty">No API calls recorded yet.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 4. Observability & Prometheus Link -->
+            <div class="usage-section">
+                <span class="drawer-section-title">Production Observability</span>
+                <div class="observability-card">
+                    <div class="obs-header">
+                        <div class="obs-title">Micrometer Prometheus Metrics</div>
+                        <a href="/actuator/prometheus" target="_blank" class="btn btn-secondary btn-xs" id="btnPrometheusLink">
+                            <span>Open /actuator/prometheus</span>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                <polyline points="15 3 21 3 21 9"></polyline>
+                                <line x1="10" y1="14" x2="21" y2="3"></line>
+                            </svg>
+                        </a>
+                    </div>
+                    <ul class="obs-metrics-list">
+                        <li><code>chitthi.api.spend.total</code> &mdash; Cumulative spend in INR</li>
+                        <li><code>chitthi.words.processed.total</code> &mdash; Indic word count counter</li>
+                        <li><code>chitthi.tts.cache.hits / misses</code> &mdash; MinIO TTS caching efficiency</li>
+                        <li><code>chitthi.stage.latency</code> &mdash; Stage timer distributions</li>
+                    </ul>
+                </div>
             </div>
         </div>
     </aside>

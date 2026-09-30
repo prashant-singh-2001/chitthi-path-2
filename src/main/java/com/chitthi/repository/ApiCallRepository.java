@@ -14,6 +14,11 @@ import java.util.UUID;
 public interface ApiCallRepository extends JpaRepository<ApiCallEntity, UUID> {
     List<ApiCallEntity> findByDocumentIdOrderByCreatedAtAsc(UUID documentId);
 
+    List<ApiCallEntity> findByDocumentIdOrderByCreatedAtDesc(UUID documentId);
+
+    @Query("SELECT a FROM ApiCallEntity a JOIN DocumentEntity d ON a.documentId = d.id WHERE d.ownerId = :ownerId ORDER BY a.createdAt DESC")
+    List<ApiCallEntity> findByOwnerIdOrderByCreatedAtDesc(@Param("ownerId") String ownerId);
+
     @Query("SELECT COALESCE(SUM(a.estCostInr), 0) FROM ApiCallEntity a WHERE a.documentId = :documentId")
     BigDecimal sumCostByDocumentId(@Param("documentId") UUID documentId);
 }

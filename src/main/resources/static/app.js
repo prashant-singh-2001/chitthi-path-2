@@ -103,7 +103,21 @@
         archiveSearchInput: document.getElementById('archiveSearchInput'),
         drawerListHeader: document.getElementById('drawerListHeader'),
         archiveLetterList: document.getElementById('archiveLetterList'),
-        toastContainer: document.getElementById('toastContainer')
+        toastContainer: document.getElementById('toastContainer'),
+
+        // Usage Ledger & Observability
+        btnToggleUsage: document.getElementById('btnToggleUsage'),
+        usageDrawer: document.getElementById('usageDrawer'),
+        btnCloseUsage: document.getElementById('btnCloseUsage'),
+        btnRefreshUsage: document.getElementById('btnRefreshUsage'),
+        quotaBadge: document.getElementById('quotaBadge'),
+        usageWordsText: document.getElementById('usageWordsText'),
+        usageWordsPercent: document.getElementById('usageWordsPercent'),
+        usageProgressBar: document.getElementById('usageProgressBar'),
+        usageTotalSpend: document.getElementById('usageTotalSpend'),
+        usageTotalCalls: document.getElementById('usageTotalCalls'),
+        usageCacheHits: document.getElementById('usageCacheHits'),
+        usageEndpointBody: document.getElementById('usageEndpointBody')
     };
 
     // Stage Elements Map
@@ -134,7 +148,9 @@
         setupAudioPlayer();
         setupReaderControls();
         setupArchiveDrawer();
+        setupUsageDrawer();
         loadRecentLetters();
+        loadUsageData();
     }
 
     function setupOwner() {
@@ -142,6 +158,7 @@
         el.ownerIdInput.addEventListener('change', () => {
             state.ownerId = el.ownerIdInput.value.trim() || 'default';
             loadRecentLetters();
+            loadUsageData();
             showToast(`Switched workspace to owner: ${state.ownerId}`, 'info');
         });
     }
@@ -359,9 +376,17 @@
             }
         }
 
+        // Daily processing cap warning
+        if (stage === 'CAP_EXCEEDED' || status === 'WARNING') {
+            updateTrackerStatus('PARTIAL');
+            showToast(`Daily processing ceiling: ${message}`, 'error', 8000);
+            loadUsageData();
+        }
+
         // Check if master assembly completed
         if (stage === 'ASSEMBLE' && status === 'COMPLETED') {
             onPipelineCompleted(documentId);
+            loadUsageData();
         }
     }
 
@@ -817,6 +842,7 @@
 
         el.drawerBackdrop.addEventListener('click', () => {
             closeArchiveDrawer();
+            closeUsageDrawer();
         });
 
         // Search Input
@@ -836,6 +862,7 @@
     }
 
     function openArchiveDrawer() {
+        closeUsageDrawer();
         el.archiveDrawer.classList.add('open');
         el.drawerBackdrop.classList.remove('hidden');
         el.archiveSearchInput.focus();
@@ -843,7 +870,117 @@
 
     function closeArchiveDrawer() {
         el.archiveDrawer.classList.remove('open');
-        el.drawerBackdrop.classList.add('hidden');
+        if (!el.usageDrawer.classList.contains('open')) {
+            el.drawerBackdrop.classList.add('hidden');
+        }
+    }
+
+    /* ==========================================================================
+       Usage Ledger & Observability Drawer
+       ========================================================================== */
+    function setupUsageDrawer() {
+        if (el.btnToggleUsage) {
+            el.btnToggleUsage.addEventListener('click', () => {
+                openUsageDrawer();
+            });
+        }
+
+        if (el.btnCloseUsage) {
+            el.btnCloseUsage.addEventListener('click', () => {
+                closeUsageDrawer();
+            });
+        }
+
+        if (el.btnRefreshUsage) {
+            el.btnRefreshUsage.addEventListener('click', () => {
+                loadUsageData();
+                showToast('Usage ledger and metrics refreshed', 'info');
+            });
+        }
+    }
+
+    function openUsageDrawer() {
+        closeArchiveDrawer();
+        el.usageDrawer.classList.add('open');
+        el.drawerBackdrop.classList.remove('hidden');
+        loadUsageData();
+    }
+
+    function closeUsageDrawer() {
+        el.usageDrawer.classList.remove('open');
+        if (!el.archiveDrawer.classList.contains('open')) {
+            el.drawerBackdrop.classList.add('hidden');
+        }
+    }
+
+    async function loadUsageData() {
+        try {
+            const docParam = state.activeDoc && state.activeDoc.documentId 
+                ? `&documentId=${encodeURIComponent(state.activeDoc.documentId)}` 
+                : '';
+            const res = await fetch(`/api/usage?ownerId=${encodeURIComponent(state.ownerId)}${docParam}`);
+            if (!res.ok) throw new Error(`Usage API responded with status ${res.status}`);
+            const data = await res.json();
+            renderUsageData(data);
+        } catch (err) {
+            console.error('Error loading usage data:', err);
+        }
+    }
+
+    function renderUsageData(data) {
+        if (!data) return;
+
+        // 1. Daily Word Cap (FR15)
+        const processed = data.dailyWordsProcessed || 0;
+        const cap = data.dailyWordCap || 7000;
+        const pct = Math.min(100, Math.round((processed / cap) * 100));
+
+        el.usageWordsText.textContent = `${processed.toLocaleString()} / ${cap.toLocaleString()}`;
+        el.usageWordsPercent.textContent = `${pct}%`;
+        el.usageProgressBar.style.width = `${pct}%`;
+
+        el.usageProgressBar.className = 'quota-progress-bar';
+        if (data.dailyCapExceeded || pct >= 100) {
+            el.usageProgressBar.classList.add('quota-danger');
+            el.quotaBadge.className = 'badge badge-rose';
+            el.quotaBadge.textContent = 'Ceiling Exceeded';
+        } else if (pct >= 70) {
+            el.usageProgressBar.classList.add('quota-warn');
+            el.quotaBadge.className = 'badge badge-amber';
+            el.quotaBadge.textContent = 'Approaching Ceiling';
+        } else {
+            el.quotaBadge.className = 'badge badge-emerald';
+            el.quotaBadge.textContent = 'Within Limit';
+        }
+
+        // 2. Spend & Ledger (FR10)
+        const spend = typeof data.totalSpendInr === 'number' ? data.totalSpendInr : parseFloat(data.totalSpendInr || 0);
+        el.usageTotalSpend.textContent = `₹${spend.toFixed(2)}`;
+        el.usageTotalCalls.textContent = (data.totalApiCalls || 0).toLocaleString();
+        el.usageCacheHits.textContent = `${data.ttsCacheHits || 0} hits`;
+
+        // 3. Endpoint Breakdown Table
+        const breakdown = data.endpointBreakdown || {};
+        const endpoints = Object.keys(breakdown);
+
+        if (endpoints.length === 0) {
+            el.usageEndpointBody.innerHTML = `<tr><td colspan="5" class="table-empty">No external API calls recorded yet for owner "${escapeHtml(data.ownerId)}".</td></tr>`;
+        } else {
+            el.usageEndpointBody.innerHTML = endpoints.map(epKey => {
+                const row = breakdown[epKey];
+                const avgLat = row.averageLatencyMs != null ? `${Math.round(row.averageLatencyMs)} ms` : '-';
+                const cost = typeof row.totalCostInr === 'number' ? row.totalCostInr : parseFloat(row.totalCostInr || 0);
+                return `
+                    <tr>
+                        <td style="font-family: monospace; font-size: 11px;">${escapeHtml(row.endpoint || epKey)}</td>
+                        <td><strong>${row.callCount || 0}</strong></td>
+                        <td>${(row.totalUnits || 0).toLocaleString()} ${escapeHtml(row.unitType || '')}</td>
+                        <td><span style="color: var(--accent-gold); font-weight: 600;">₹${cost.toFixed(3)}</span></td>
+                        <td style="color: var(--text-muted);">${avgLat}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
     }
 
     async function loadRecentLetters() {

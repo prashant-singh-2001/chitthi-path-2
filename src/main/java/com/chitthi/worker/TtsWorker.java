@@ -47,6 +47,7 @@ public class TtsWorker {
     private final AudioStitcherService audioStitcherService;
     private final RabbitTemplate rabbitTemplate;
     private final DocumentProgressEventService eventService;
+    private final com.chitthi.service.UsageLedgerService usageLedgerService;
 
     public TtsWorker(PageRepository pageRepository,
                      StageTaskRepository stageTaskRepository,
@@ -57,6 +58,20 @@ public class TtsWorker {
                      AudioStitcherService audioStitcherService,
                      RabbitTemplate rabbitTemplate,
                      DocumentProgressEventService eventService) {
+        this(pageRepository, stageTaskRepository, apiCallRepository, objectStorageService,
+                sarvamClient, textChunkingService, audioStitcherService, rabbitTemplate, eventService, null);
+    }
+
+    public TtsWorker(PageRepository pageRepository,
+                     StageTaskRepository stageTaskRepository,
+                     ApiCallRepository apiCallRepository,
+                     ObjectStorageService objectStorageService,
+                     SarvamClient sarvamClient,
+                     TextChunkingService textChunkingService,
+                     AudioStitcherService audioStitcherService,
+                     RabbitTemplate rabbitTemplate,
+                     DocumentProgressEventService eventService,
+                     com.chitthi.service.UsageLedgerService usageLedgerService) {
         this.pageRepository = pageRepository;
         this.stageTaskRepository = stageTaskRepository;
         this.apiCallRepository = apiCallRepository;
@@ -66,6 +81,7 @@ public class TtsWorker {
         this.audioStitcherService = audioStitcherService;
         this.rabbitTemplate = rabbitTemplate;
         this.eventService = eventService;
+        this.usageLedgerService = usageLedgerService;
     }
 
     @RabbitListener(queues = RabbitConfig.TTS_QUEUE)
@@ -169,6 +185,9 @@ public class TtsWorker {
                 byte[] cachedAudioBytes = objectStorageService.downloadFile(cacheStorageKey);
                 if (cachedAudioBytes != null && cachedAudioBytes.length > 0) {
                     objectStorageService.uploadFile(targetStorageKey, cachedAudioBytes, "audio/wav");
+                    if (usageLedgerService != null) {
+                        usageLedgerService.recordTtsCacheHit();
+                    }
                     log.info("TTS Cache HIT for cacheKey: {}. Reused {} bytes for page {} ({}) with 0 duplicate API calls",
                             cacheStorageKey, cachedAudioBytes.length, pageNo, langSuffix);
                     return;
@@ -180,6 +199,9 @@ public class TtsWorker {
         }
 
         // Cache MISS: Synthesize via Sarvam Bulbul
+        if (usageLedgerService != null) {
+            usageLedgerService.recordTtsCacheMiss();
+        }
         List<String> chunks = textChunkingService.chunkText(text, MAX_TTS_CHARS_PER_CHUNK);
         List<byte[]> audioChunks = new ArrayList<>();
 
