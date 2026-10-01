@@ -36,7 +36,10 @@ Many families hold boxes of old letters, personal diaries, and ancestral records
 * **Sub-300ms Search:** Full-text search across translated English (`tsvector`) and fuzzy substring search across original Indic scripts via PostgreSQL trigrams (`pg_trgm`).
 * **Zero Duplicate Paid Calls:** Deterministic idempotency keys `hash(doc_id, page_no, stage, content_hash)` prevent duplicate billable API invocations upon retries.
 * **Selective Invalidation on Edit:** Editing page transcription re-runs translation and audio synthesis *only* for that page, keeping regeneration cost-effective.
-* **Ledger & Cost Tracking:** Every third-party API call records consumed units (characters/pages), latency, and estimated cost in INR.
+* **Ledger & Cost Tracking:** Every third-party API call records consumed units (characters/pages), latency, and estimated cost in INR with a strict 7,000-word daily ceiling.
+* **Cascading Hard Delete & MinIO Purge:** Permanent, owner-authorized deletion (`DELETE /api/documents/{id}`) that purges all database entities and MinIO S3 object prefixes (`documents/{id}/*`) while terminating active SSE emitters.
+* **Per-IP Rate Limiting:** High-throughput sliding token bucket filter protecting ingestion (10 req/min) and search (60 req/min) returning HTTP 429 with `Retry-After`.
+* **Shareable Read-and-Listen Links:** Generates ephemeral access tokens and clean direct links (`?docId=...`) for sharing digitized letters.
 
 ---
 
@@ -145,15 +148,16 @@ The API server will start on `http://localhost:8080`.
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/api/health` | Healthcheck and service version status |
-| `POST` | `/api/documents` | Multipart document upload (`file`, `language`, `tags`, `year`) |
+| `POST` | `/api/documents` | Multipart document upload (`file`, `language`, `tags`, `year`) [Rate-limited: 10/min/IP] |
 | `GET` | `/api/documents/{id}` | Get document status, per-page progress, and signed audio links |
 | `GET` | `/api/documents/{id}/events` | Server-Sent Events (SSE) stream of real-time page pipeline progress |
 | `PUT` | `/api/documents/{id}/pages/{n}/text` | Edit transcribed page text; selectively invalidates translation & TTS |
 | `POST` | `/api/documents/{id}/retry` | Re-queue dead-lettered/failed stages for a document |
 | `GET` | `/api/documents/{id}/audio?lang=orig\|en` | Presigned URL to download or stream stitched audio |
-| `GET` | `/api/search?q=&tag=&year=` | Sub-300ms full-text and Indic trigram search across documents |
+| `GET` | `/api/documents/{id}/share?expiryHours=24` | Generate ephemeral shareable read & listen access link |
+| `DELETE`| `/api/documents/{id}` | Cascading hard delete: purge database entities, S3 prefix, and close SSE (HTTP 204) |
+| `GET` | `/api/documents/search?q=&tag=&year=` | Sub-300ms full-text and Indic trigram search across documents [Rate-limited: 60/min/IP] |
 | `GET` | `/api/usage` | Consumption and estimated INR spend ledger per user and document |
-| `DELETE`| `/api/documents/{id}` | Hard delete document, pages, database records, and S3 objects |
 
 ---
 
@@ -161,17 +165,24 @@ The API server will start on `http://localhost:8080`.
 
 Chitthi includes built-in safeguards to protect against quota exhaustion and unexpected bills:
 
-* **Token Bucket Rate Limiting:** Enforces Sarvam's strict 10 requests/minute Document AI limit across all worker threads.
-* **Daily Word Cap:** Enforces a configurable processing cap (default 7,000 words/user/day) preventing runaway usage.
+* **Per-IP Public API Rate Limiting:** High-performance sliding token bucket filter throttling public ingestion (`10 requests/min`) and search queries (`60 requests/min`) returning standard `HTTP 429 Too Many Requests` with `Retry-After: 60`.
+* **Outbound Worker Rate Limiting:** Enforces Sarvam's strict 10 requests/minute Document AI limit across all asynchronous worker threads.
+* **Daily Word Cap:** Enforces a configurable processing cap (default 7,000 words/user/day) preventing runaway usage across both pre-ingestion and post-OCR checkpoints.
 * **Circuit Breakers:** Resilience4j circuit breakers pause processing when external APIs return sustained errors (503/429) rather than burning retries.
 * **Cost Ledger:** Logs unit consumption (pages, characters) and estimated INR cost for each API call into the `api_call` table.
+* **TTS Audio Caching:** Synthesized Bulbul audio is hashed and cached in MinIO (`cache/tts/{hash}.wav`), eliminating duplicate API costs on re-assembly.
 
 ---
 
 ## 🧪 Testing Strategy
 
+The test suite comprises **83 comprehensive automated tests** across all architectural layers:
+
 * **Zero-Credit Contract Testing:** [`SarvamClientWireMockTest`](src/test/java/com/chitthi/client/sarvam/SarvamClientWireMockTest.java) uses dynamic port WireMock to validate payload structures, headers (`api-subscription-key`), and response handling without calling real APIs.
 * **Containerized DB Testing:** [`ChitthiApplicationTests`](src/test/java/com/chitthi/ChitthiApplicationTests.java) uses Spring Boot 3 `@ServiceConnection` and Testcontainers PostgreSQL to verify Flyway migrations and `pg_trgm` extension initialization.
+* **Hard Delete & Storage Purge:** [`DocumentHardDeleteTest`](src/test/java/com/chitthi/service/DocumentHardDeleteTest.java) and [`ObjectStorageServiceTest`](src/test/java/com/chitthi/storage/ObjectStorageServiceTest.java) verify S3 prefix purging, cascading entity deletion, and emitter termination.
+* **Rate Limiting Tests:** [`RateLimitingFilterTest`](src/test/java/com/chitthi/config/RateLimitingFilterTest.java) validates IP token exhaustion, HTTP 429 headers, and IP address extraction (`X-Forwarded-For`).
+* **Web & Ingestion Tests:** Comprehensive Spring MVC slice tests covering search, edit flow, retry mechanics, and SSE emitter lifecycles.
 
 ---
 

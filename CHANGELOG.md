@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Owner-Scoped Cascading Hard Delete (`FR14`, `DELETE /api/documents/{id}`):** Permanent deletion of documents and child entities (`page`, `ocr_batch`, `stage_task`) with authorization checking (`403 Forbidden` for non-owners, `404 Not Found` for nonexistent). Historical spend ledger (`api_call`) is retained via PostgreSQL `ON DELETE SET NULL`.
+- **MinIO Object Prefix Cleanup:** Complete object storage purge of `documents/{documentId}/*` (scanned PDF/images, rendered page PNGs, per-page audio WAVs, stitched audio WAVs, OCR zip outputs), while preserving deduplicated generic TTS audio cache (`cache/tts/{textHash}.wav`).
+- **Immediate Event Stream Termination:** Active Server-Sent Event (SSE) emitters for the deleted document are instantly terminated (`closeEmitters`).
+- **Per-IP Token Bucket Rate Limiting (`Privacy & Cost NFRs`):** Servlet filter enforcing client-IP rate limits with standard HTTP 429 and `Retry-After: 60` headers:
+  - Document ingestion: `POST /api/documents` (10 requests/minute per IP)
+  - Archive search: `GET /api/documents/search` (60 requests/minute per IP)
+  - Memory-efficient sliding token bucket with automated hourly eviction of stale IP records.
+- **Shareable Read-and-Listen Links (`FR11`, `GET /api/documents/{id}/share`):** Ephemeral access token generation with configurable expiration (default 24h, max 168h / 7 days) and shareable web link format (`/index.html?docId=...`).
+- **Modern Web UI Modals & Deep Linking:**
+  - Glassmorphic Delete Confirmation Modal with permanent deletion warning and instant reader pane reset.
+  - Reader toolbar and archive card delete triggers.
+  - Share Modal with one-click copy to clipboard.
+  - Auto-loader support via URL query parameter `?docId=...` for instant document retrieval.
 - **Usage Ledger & Spend Tracking (`FR10`, `GET /api/usage`):** Added `UsageLedgerService`, `UsageController`, and DTOs to track and audit Sarvam AI spend in INR (₹), unit consumption (pages, characters), call counts, and latency statistics aggregated per owner and document.
 - **Strict 7,000-Word Daily Ceiling (`FR15`):** Dual enforcement of daily word quota: pre-ingestion check at `DocumentIngestionService` (rejects with HTTP 429 `DailyWordCapExceededException`) and post-OCR check at `OcrBatchStatusPoller` (marks page `CAPPED`, document `PARTIAL`, pauses downstream translation/TTS dispatch, and emits SSE warning).
 - **Production Observability via Prometheus (`/actuator/prometheus`):** Micrometer counters and distribution summaries for `chitthi.api.spend.total`, `chitthi.words.processed.total`, `chitthi.tts.cache.hits`, `chitthi.tts.cache.misses`, and `chitthi.stage.latency`.
