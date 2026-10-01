@@ -14,4 +14,6 @@ public interface StageTaskRepository extends JpaRepository<StageTaskEntity, UUID
     List<StageTaskEntity> findByPageId(UUID pageId);
     List<StageTaskEntity> findByPageIdAndStage(UUID pageId, String stage);
     List<StageTaskEntity> findByStatus(String status);
+    void deleteByPageId(UUID pageId);
+    void deleteByPageIdIn(List<UUID> pageIds);
 }

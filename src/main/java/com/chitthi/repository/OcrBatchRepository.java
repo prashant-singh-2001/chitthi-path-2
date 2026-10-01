@@ -14,4 +14,5 @@ public interface OcrBatchRepository extends JpaRepository<OcrBatchEntity, UUID> 
     List<OcrBatchEntity> findByDocumentId(UUID documentId);
     Optional<OcrBatchEntity> findBySarvamJobId(String sarvamJobId);
     List<OcrBatchEntity> findByStatusInAndNextPollAtBefore(List<String> statuses, Instant now);
+    void deleteByDocumentId(UUID documentId);
 }

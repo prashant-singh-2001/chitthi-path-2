@@ -103,4 +103,20 @@ public class DocumentProgressEventService {
         }
         log.debug("Removed SSE emitter for documentId: {}", documentId);
     }
+
+    /**
+     * Closes and removes all active emitters for a document (e.g. upon document deletion).
+     */
+    public void closeEmitters(UUID documentId) {
+        List<SseEmitter> list = emitters.remove(documentId);
+        if (list != null) {
+            for (SseEmitter emitter : list) {
+                try {
+                    emitter.complete();
+                } catch (Exception ignored) {
+                }
+            }
+            log.info("Closed {} SSE emitters for deleted documentId: {}", list.size(), documentId);
+        }
+    }
 }

@@ -19,6 +19,7 @@ public interface PageRepository extends JpaRepository<PageEntity, UUID> {
     List<PageEntity> findByDocumentIdAndPageNoBetweenOrderByPageNoAsc(UUID documentId, Integer startPage, Integer endPage);
 
     Optional<PageEntity> findByDocumentIdAndPageNo(UUID documentId, Integer pageNo);
+    void deleteByDocumentId(UUID documentId);
 
     /**
      * Find pages updated for a specific owner since a timestamp (used for daily word cap calculations).

@@ -109,4 +109,43 @@ public class ObjectStorageService {
         s3Client.deleteObject(request);
         log.info("Deleted object from bucket: {}, key: {}", properties.bucket(), key);
     }
+
+    /**
+     * Delete all objects matching a given prefix.
+     */
+    public void deletePrefix(String prefix) {
+        try {
+            ListObjectsV2Request listRequest = ListObjectsV2Request.builder()
+                    .bucket(properties.bucket())
+                    .prefix(prefix)
+                    .build();
+
+            ListObjectsV2Response listResponse;
+            int totalDeleted = 0;
+            do {
+                listResponse = s3Client.listObjectsV2(listRequest);
+                if (listResponse.hasContents() && !listResponse.contents().isEmpty()) {
+                    java.util.List<ObjectIdentifier> toDelete = listResponse.contents().stream()
+                            .map(s3Object -> ObjectIdentifier.builder().key(s3Object.key()).build())
+                            .toList();
+
+                    DeleteObjectsRequest deleteRequest = DeleteObjectsRequest.builder()
+                            .bucket(properties.bucket())
+                            .delete(Delete.builder().objects(toDelete).build())
+                            .build();
+
+                    s3Client.deleteObjects(deleteRequest);
+                    totalDeleted += toDelete.size();
+                }
+
+                String token = listResponse.nextContinuationToken();
+                listRequest = listRequest.toBuilder().continuationToken(token).build();
+            } while (listResponse.isTruncated());
+
+            log.info("Deleted {} objects under prefix: {} from bucket: {}", totalDeleted, prefix, properties.bucket());
+        } catch (Exception e) {
+            log.error("Failed to delete objects under prefix: {} from bucket: {}", prefix, properties.bucket(), e);
+            throw new RuntimeException("Failed to purge storage prefix: " + prefix, e);
+        }
+    }
 }
