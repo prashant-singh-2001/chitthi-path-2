@@ -367,6 +367,26 @@
                         <button class="toggle-btn" id="btnViewScan" title="Scan Image Only">Scan Only</button>
                         <button class="toggle-btn" id="btnViewText" title="Transcribed Text Only">Text Only</button>
                     </div>
+
+                    <div class="reader-actions-group">
+                        <button class="btn btn-secondary btn-sm" id="btnShareDocument" title="Generate Shareable Read & Listen Link (FR11)" disabled>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="18" cy="5" r="3"></circle>
+                                <circle cx="6" cy="12" r="3"></circle>
+                                <circle cx="18" cy="19" r="3"></circle>
+                                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                            </svg>
+                            <span>Share</span>
+                        </button>
+                        <button class="btn btn-danger btn-sm" id="btnDeleteDocument" title="Permanently Delete Letter & Assets (FR14)" disabled>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                            <span>Delete</span>
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Split Pane Container -->
@@ -626,6 +646,97 @@
         </div>
     </aside>
     <div class="drawer-backdrop hidden" id="drawerBackdrop"></div>
+
+    <!-- Confirmation Modal: Permanent Delete (FR14 / Privacy NFR) -->
+    <div class="modal-backdrop hidden" id="deleteModalBackdrop">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <div class="modal-title-row">
+                    <div class="modal-icon-danger">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="modal-title">Permanently Delete Letter</h3>
+                        <p class="modal-subtitle">Hard Delete & MinIO Object Purge (FR14)</p>
+                    </div>
+                </div>
+                <button class="modal-close-btn" id="btnCancelDeleteModal" title="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to permanently delete <strong id="deleteTargetTitle" style="color: var(--accent-gold);">this letter</strong>?</p>
+                <div class="alert-box alert-danger">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="8" x2="12" y2="12"></line>
+                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                    </svg>
+                    <span>All raw scans, high-resolution rendered pages, Indic OCR transcriptions, English translations, and dual-voice WAV audio files will be permanently purged from MinIO object storage and PostgreSQL. This action cannot be reversed.</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnCancelDelete">Cancel</button>
+                <button class="btn btn-danger" id="btnConfirmDelete">
+                    <span id="btnConfirmDeleteText">Permanently Delete</span>
+                    <div class="spinner hidden" id="deleteSpinner"></div>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shareable Read & Listen Link Modal (FR11) -->
+    <div class="modal-backdrop hidden" id="shareModalBackdrop">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <div class="modal-title-row">
+                    <div class="modal-icon-indigo">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="18" cy="5" r="3"></circle>
+                            <circle cx="6" cy="12" r="3"></circle>
+                            <circle cx="18" cy="19" r="3"></circle>
+                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="modal-title">Share Letter</h3>
+                        <p class="modal-subtitle">Ephemeral Read-and-Listen Link (FR11)</p>
+                    </div>
+                </div>
+                <button class="modal-close-btn" id="btnCancelShareModal" title="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>Anyone with this link can read the Indic transcription, view translations, and listen to the dual-voice audio track:</p>
+                <div class="share-input-wrapper">
+                    <input type="text" id="shareUrlInput" readonly class="share-url-input">
+                    <button class="btn btn-primary btn-sm" id="btnCopyShareUrl">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                        <span>Copy</span>
+                    </button>
+                </div>
+                <p class="share-expiry-hint" id="shareExpiryHint">Valid for 24 hours. Does not grant archivist edit or delete permissions.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="btnCloseShare">Close</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Toast Notification Container -->
     <div class="toast-container" id="toastContainer"></div>

@@ -14,7 +14,8 @@
         currentAudioTrack: 'en',
         eventSource: null,
         ownerId: 'default',
-        searchDebounceTimer: null
+        searchDebounceTimer: null,
+        pendingDeleteDocId: null
     };
 
     // DOM Elements Cache
@@ -117,7 +118,24 @@
         usageTotalSpend: document.getElementById('usageTotalSpend'),
         usageTotalCalls: document.getElementById('usageTotalCalls'),
         usageCacheHits: document.getElementById('usageCacheHits'),
-        usageEndpointBody: document.getElementById('usageEndpointBody')
+        usageEndpointBody: document.getElementById('usageEndpointBody'),
+
+        // Modals & Document Actions
+        btnDeleteDocument: document.getElementById('btnDeleteDocument'),
+        btnShareDocument: document.getElementById('btnShareDocument'),
+        deleteModalBackdrop: document.getElementById('deleteModalBackdrop'),
+        deleteTargetTitle: document.getElementById('deleteTargetTitle'),
+        btnCancelDeleteModal: document.getElementById('btnCancelDeleteModal'),
+        btnCancelDelete: document.getElementById('btnCancelDelete'),
+        btnConfirmDelete: document.getElementById('btnConfirmDelete'),
+        btnConfirmDeleteText: document.getElementById('btnConfirmDeleteText'),
+        deleteSpinner: document.getElementById('deleteSpinner'),
+        shareModalBackdrop: document.getElementById('shareModalBackdrop'),
+        btnCancelShareModal: document.getElementById('btnCancelShareModal'),
+        btnCloseShare: document.getElementById('btnCloseShare'),
+        shareUrlInput: document.getElementById('shareUrlInput'),
+        btnCopyShareUrl: document.getElementById('btnCopyShareUrl'),
+        shareExpiryHint: document.getElementById('shareExpiryHint')
     };
 
     // Stage Elements Map
@@ -149,8 +167,18 @@
         setupReaderControls();
         setupArchiveDrawer();
         setupUsageDrawer();
+        setupDeleteAndShareModals();
         loadRecentLetters();
         loadUsageData();
+        checkUrlParams();
+    }
+
+    function checkUrlParams() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const docId = urlParams.get('docId');
+        if (docId) {
+            loadDocumentDetails(docId);
+        }
     }
 
     function setupOwner() {
@@ -497,6 +525,8 @@
 
             // Update UI headers
             el.playerAudioTitle.textContent = doc.title;
+            if (el.btnDeleteDocument) el.btnDeleteDocument.disabled = false;
+            if (el.btnShareDocument) el.btnShareDocument.disabled = false;
             renderCurrentPage();
 
             // Load audio track
@@ -1013,7 +1043,15 @@
                 <div class="letter-item" data-id="${letter.id}">
                     <div class="letter-item-header">
                         <span class="letter-item-title">${escapeHtml(letter.title)}</span>
-                        <span class="status-pill status-${letter.status.toLowerCase()}">${letter.status}</span>
+                        <div class="letter-item-header-actions">
+                            <span class="status-pill status-${letter.status.toLowerCase()}">${letter.status}</span>
+                            <button class="letter-item-delete-btn" data-delete-id="${letter.id}" data-delete-title="${escapeHtml(letter.title)}" title="Delete Letter">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
                     <p class="letter-item-snippet">${escapeHtml(shortSnippet)}</p>
                     <div class="letter-item-footer">
@@ -1027,11 +1065,23 @@
 
         // Attach click listeners to letter items
         el.archiveLetterList.querySelectorAll('.letter-item').forEach(item => {
-            item.addEventListener('click', () => {
+            item.addEventListener('click', (e) => {
+                // If clicked on delete button, do not open reader
+                if (e.target.closest('.letter-item-delete-btn')) return;
                 const docId = item.getAttribute('data-id');
                 closeArchiveDrawer();
                 showToast('Loading letter...', 'info');
                 loadDocumentDetails(docId);
+            });
+        });
+
+        // Attach delete listeners to card delete buttons
+        el.archiveLetterList.querySelectorAll('.letter-item-delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const docId = btn.getAttribute('data-delete-id');
+                const title = btn.getAttribute('data-delete-title');
+                openDeleteModal(docId, title);
             });
         });
     }
@@ -1103,6 +1153,184 @@
 
     function escapeRegex(string) {
         return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    /* ==========================================================================
+       Delete & Share Modals (FR11, FR14, Privacy NFR)
+       ========================================================================== */
+    function setupDeleteAndShareModals() {
+        // Delete button in Reader toolbar
+        if (el.btnDeleteDocument) {
+            el.btnDeleteDocument.addEventListener('click', () => {
+                if (state.activeDoc) {
+                    openDeleteModal(state.activeDoc.id, state.activeDoc.title);
+                }
+            });
+        }
+
+        // Cancel Delete buttons
+        if (el.btnCancelDeleteModal) {
+            el.btnCancelDeleteModal.addEventListener('click', closeDeleteModal);
+        }
+        if (el.btnCancelDelete) {
+            el.btnCancelDelete.addEventListener('click', closeDeleteModal);
+        }
+
+        // Backdrop click to cancel delete
+        if (el.deleteModalBackdrop) {
+            el.deleteModalBackdrop.addEventListener('click', (e) => {
+                if (e.target === el.deleteModalBackdrop) closeDeleteModal();
+            });
+        }
+
+        // Confirm Delete button
+        if (el.btnConfirmDelete) {
+            el.btnConfirmDelete.addEventListener('click', executeDelete);
+        }
+
+        // Share button in Reader toolbar
+        if (el.btnShareDocument) {
+            el.btnShareDocument.addEventListener('click', () => {
+                if (state.activeDoc) {
+                    openShareModal(state.activeDoc.id);
+                }
+            });
+        }
+
+        // Close Share modal buttons
+        if (el.btnCancelShareModal) {
+            el.btnCancelShareModal.addEventListener('click', closeShareModal);
+        }
+        if (el.btnCloseShare) {
+            el.btnCloseShare.addEventListener('click', closeShareModal);
+        }
+
+        // Backdrop click to cancel share
+        if (el.shareModalBackdrop) {
+            el.shareModalBackdrop.addEventListener('click', (e) => {
+                if (e.target === el.shareModalBackdrop) closeShareModal();
+            });
+        }
+
+        // Copy Share URL button
+        if (el.btnCopyShareUrl) {
+            el.btnCopyShareUrl.addEventListener('click', copyShareUrl);
+        }
+    }
+
+    function openDeleteModal(docId, docTitle) {
+        state.pendingDeleteDocId = docId;
+        el.deleteTargetTitle.textContent = docTitle || 'this letter';
+        el.deleteModalBackdrop.classList.remove('hidden');
+    }
+
+    function closeDeleteModal() {
+        state.pendingDeleteDocId = null;
+        el.deleteModalBackdrop.classList.add('hidden');
+        setDeleteLoading(false);
+    }
+
+    function setDeleteLoading(loading) {
+        el.btnConfirmDelete.disabled = loading;
+        if (loading) {
+            el.btnConfirmDeleteText.textContent = 'Deleting...';
+            el.deleteSpinner.classList.remove('hidden');
+        } else {
+            el.btnConfirmDeleteText.textContent = 'Permanently Delete';
+            el.deleteSpinner.classList.add('hidden');
+        }
+    }
+
+    async function executeDelete() {
+        if (!state.pendingDeleteDocId) return;
+        const docId = state.pendingDeleteDocId;
+        setDeleteLoading(true);
+
+        try {
+            const res = await fetch(`/api/documents/${docId}?ownerId=${encodeURIComponent(state.ownerId)}`, {
+                method: 'DELETE'
+            });
+
+            if (!res.ok && res.status !== 204) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.message || `Failed to delete document (${res.status})`);
+            }
+
+            showToast('Letter and storage assets permanently deleted', 'success');
+            closeDeleteModal();
+
+            // If deleted document is currently loaded in reader, clear it
+            if (state.activeDoc && state.activeDoc.id === docId) {
+                resetReaderUI();
+            }
+
+            // Refresh archive letter list & usage ledger
+            loadRecentLetters();
+            loadUsageData();
+
+        } catch (err) {
+            console.error('Delete error:', err);
+            showToast(err.message || 'Failed to delete letter', 'error');
+            setDeleteLoading(false);
+        }
+    }
+
+    function resetReaderUI() {
+        state.activeDoc = null;
+        state.currentPageIndex = 0;
+        if (el.btnDeleteDocument) el.btnDeleteDocument.disabled = true;
+        if (el.btnShareDocument) el.btnShareDocument.disabled = true;
+        el.pageDisplay.textContent = 'Page 1 of 1';
+        el.btnPrevPage.disabled = true;
+        el.btnNextPage.disabled = true;
+        el.scanPlaceholder.classList.remove('hidden');
+        el.scannedImage.classList.add('hidden');
+        el.scannedImage.src = '';
+        el.indicTextDisplay.textContent = 'OCR transcription will appear here once processed.';
+        el.translationPlaceholder.classList.remove('hidden');
+        el.englishTextDisplay.classList.add('hidden');
+        el.englishTextDisplay.innerHTML = '';
+        el.playerAudioTitle.textContent = 'Natural Audio Reader';
+        el.playerAudioTrack.textContent = 'No audio loaded';
+        el.btnPlayPause.disabled = true;
+        el.audioTimeline.disabled = true;
+        if (el.nativeAudio) {
+            el.nativeAudio.pause();
+            el.nativeAudio.src = '';
+        }
+    }
+
+    async function openShareModal(docId) {
+        try {
+            const res = await fetch(`/api/documents/${docId}/share?ownerId=${encodeURIComponent(state.ownerId)}&expiryHours=24`);
+            if (!res.ok) {
+                throw new Error('Failed to generate share link');
+            }
+            const data = await res.json();
+            const fullUrl = window.location.origin + data.shareUrl;
+            el.shareUrlInput.value = fullUrl;
+            el.shareExpiryHint.textContent = `Valid until ${new Date(data.expiresAt).toLocaleString()}. Read-only access.`;
+            el.shareModalBackdrop.classList.remove('hidden');
+        } catch (err) {
+            console.error('Share error:', err);
+            showToast(err.message || 'Failed to generate share link', 'error');
+        }
+    }
+
+    function closeShareModal() {
+        el.shareModalBackdrop.classList.add('hidden');
+    }
+
+    async function copyShareUrl() {
+        try {
+            await navigator.clipboard.writeText(el.shareUrlInput.value);
+            showToast('Share link copied to clipboard!', 'success');
+        } catch (err) {
+            // Fallback for restricted clipboard permissions
+            el.shareUrlInput.select();
+            document.execCommand('copy');
+            showToast('Share link copied to clipboard!', 'success');
+        }
     }
 
     /* ==========================================================================
