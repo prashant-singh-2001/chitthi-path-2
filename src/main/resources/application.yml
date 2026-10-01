@@ -78,6 +78,10 @@ chitthi:
     page-concurrency: 5
     max-retry-attempts: 3
     daily-word-cap: 7000
+  ratelimit:
+    enabled: true
+    upload-limit-per-minute: 10
+    search-limit-per-minute: 60
 
 resilience4j:
   ratelimiter:
