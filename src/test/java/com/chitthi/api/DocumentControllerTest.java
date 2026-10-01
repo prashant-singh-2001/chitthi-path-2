@@ -215,5 +215,35 @@ class DocumentControllerTest {
                         .content("{\"text\": \"   \"}"))
                 .andExpect(status().isBadRequest());
     }
+
+    @Test
+    void deleteDocument_shouldReturnNoContent() throws Exception {
+        UUID docId = UUID.randomUUID();
+        org.mockito.Mockito.doNothing().when(ingestionService).deleteDocument(docId, "default");
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/documents/" + docId)
+                        .param("ownerId", "default"))
+                .andExpect(status().isNoContent());
+
+        org.mockito.Mockito.verify(ingestionService).deleteDocument(docId, "default");
+    }
+
+    @Test
+    void shareDocument_shouldReturnShareLinkResponse() throws Exception {
+        UUID docId = UUID.randomUUID();
+        com.chitthi.api.dto.ShareLinkResponse shareResponse = new com.chitthi.api.dto.ShareLinkResponse(
+                docId, "Old Manuscript", "/index.html?docId=" + docId + "&shareToken=xyz", "xyz", Instant.now().plusSeconds(86400)
+        );
+
+        when(ingestionService.generateShareLink(docId, "default", 24)).thenReturn(shareResponse);
+
+        mockMvc.perform(get("/api/documents/" + docId + "/share")
+                        .param("ownerId", "default")
+                        .param("expiryHours", "24"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.documentId").value(docId.toString()))
+                .andExpect(jsonPath("$.title").value("Old Manuscript"))
+                .andExpect(jsonPath("$.shareUrl").value("/index.html?docId=" + docId + "&shareToken=xyz"));
+    }
 }
 

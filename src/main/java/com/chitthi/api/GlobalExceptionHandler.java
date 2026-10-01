@@ -47,4 +47,37 @@ public class GlobalExceptionHandler {
                 "timestamp", Instant.now().toString()
         ));
     }
+
+    @ExceptionHandler(com.chitthi.exception.DocumentNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleDocumentNotFound(com.chitthi.exception.DocumentNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                "error", "DOCUMENT_NOT_FOUND",
+                "message", ex.getMessage(),
+                "documentId", ex.getDocumentId().toString(),
+                "timestamp", Instant.now().toString()
+        ));
+    }
+
+    @ExceptionHandler(com.chitthi.exception.UnauthorizedDocumentAccessException.class)
+    public ResponseEntity<Map<String, Object>> handleUnauthorizedAccess(com.chitthi.exception.UnauthorizedDocumentAccessException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                "error", "FORBIDDEN",
+                "message", ex.getMessage(),
+                "documentId", ex.getDocumentId().toString(),
+                "ownerId", ex.getRequestingOwnerId(),
+                "timestamp", Instant.now().toString()
+        ));
+    }
+
+    @ExceptionHandler(com.chitthi.exception.RateLimitExceededException.class)
+    public ResponseEntity<Map<String, Object>> handleRateLimitExceeded(com.chitthi.exception.RateLimitExceededException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(Map.of(
+                        "error", "RATE_LIMIT_EXCEEDED",
+                        "message", ex.getMessage(),
+                        "retryAfterSeconds", ex.getRetryAfterSeconds(),
+                        "timestamp", Instant.now().toString()
+                ));
+    }
 }

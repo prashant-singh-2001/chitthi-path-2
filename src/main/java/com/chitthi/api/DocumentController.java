@@ -122,4 +122,26 @@ public class DocumentController {
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
+
+    /**
+     * Hard-delete a document, its pages, audio, and all derived artifacts from storage and database (FR14 / Privacy NFR).
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteDocument(
+            @PathVariable("id") UUID id,
+            @RequestParam(value = "ownerId", defaultValue = "default") String ownerId) {
+        ingestionService.deleteDocument(id, ownerId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Generate an ephemeral shareable read-and-listen link for a document with configurable expiry (FR11).
+     */
+    @GetMapping("/{id}/share")
+    public ResponseEntity<com.chitthi.api.dto.ShareLinkResponse> shareDocument(
+            @PathVariable("id") UUID id,
+            @RequestParam(value = "ownerId", defaultValue = "default") String ownerId,
+            @RequestParam(value = "expiryHours", defaultValue = "24") int expiryHours) {
+        return ResponseEntity.ok(ingestionService.generateShareLink(id, ownerId, expiryHours));
+    }
 }

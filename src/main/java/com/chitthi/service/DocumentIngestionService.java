@@ -7,11 +7,15 @@ import com.chitthi.domain.entity.OcrBatchEntity;
 import com.chitthi.domain.entity.OutboxEntity;
 import com.chitthi.domain.entity.PageEntity;
 import com.chitthi.messaging.dto.OcrBatchMessage;
+import com.chitthi.exception.DocumentNotFoundException;
+import com.chitthi.exception.UnauthorizedDocumentAccessException;
 import com.chitthi.repository.DocumentRepository;
 import com.chitthi.repository.OcrBatchRepository;
 import com.chitthi.repository.OutboxRepository;
 import com.chitthi.repository.PageRepository;
+import com.chitthi.repository.StageTaskRepository;
 import com.chitthi.storage.ObjectStorageService;
+import com.chitthi.util.IdempotencyUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -22,6 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 
@@ -41,6 +47,7 @@ public class DocumentIngestionService {
     private final ObjectMapper objectMapper;
     private final DocumentProgressEventService eventService;
     private final UsageLedgerService usageLedgerService;
+    private final StageTaskRepository stageTaskRepository;
 
     public DocumentIngestionService(DocumentRepository documentRepository,
                                   PageRepository pageRepository,
@@ -52,7 +59,7 @@ public class DocumentIngestionService {
                                   ObjectMapper objectMapper,
                                   DocumentProgressEventService eventService) {
         this(documentRepository, pageRepository, ocrBatchRepository, outboxRepository,
-                objectStorageService, pdfSplitterService, rabbitTemplate, objectMapper, eventService, null);
+                objectStorageService, pdfSplitterService, rabbitTemplate, objectMapper, eventService, null, null);
     }
 
     public DocumentIngestionService(DocumentRepository documentRepository,
@@ -65,6 +72,21 @@ public class DocumentIngestionService {
                                   ObjectMapper objectMapper,
                                   DocumentProgressEventService eventService,
                                   UsageLedgerService usageLedgerService) {
+        this(documentRepository, pageRepository, ocrBatchRepository, outboxRepository,
+                objectStorageService, pdfSplitterService, rabbitTemplate, objectMapper, eventService, usageLedgerService, null);
+    }
+
+    public DocumentIngestionService(DocumentRepository documentRepository,
+                                  PageRepository pageRepository,
+                                  OcrBatchRepository ocrBatchRepository,
+                                  OutboxRepository outboxRepository,
+                                  ObjectStorageService objectStorageService,
+                                  PdfSplitterService pdfSplitterService,
+                                  RabbitTemplate rabbitTemplate,
+                                  ObjectMapper objectMapper,
+                                  DocumentProgressEventService eventService,
+                                  UsageLedgerService usageLedgerService,
+                                  StageTaskRepository stageTaskRepository) {
         this.documentRepository = documentRepository;
         this.pageRepository = pageRepository;
         this.ocrBatchRepository = ocrBatchRepository;
@@ -75,6 +97,7 @@ public class DocumentIngestionService {
         this.objectMapper = objectMapper;
         this.eventService = eventService;
         this.usageLedgerService = usageLedgerService;
+        this.stageTaskRepository = stageTaskRepository;
     }
 
     @Transactional
@@ -474,6 +497,87 @@ public class DocumentIngestionService {
             String presignedUrl = objectStorageService.generatePresignedUrl(audioKey);
             return new AudioLinkResponse(documentId, suffix, presignedUrl);
         });
+    }
+
+    /**
+     * Hard-delete a document and all derived artifacts:
+     * 1. Validates document exists and requesting owner owns it.
+     * 2. Purges all objects from MinIO with prefix documents/{documentId}/
+     * 3. Deletes stage_task rows, ocr_batch rows, page rows, and document entity.
+     * 4. Closes all active SSE emitters for the document.
+     */
+    @Transactional
+    public void deleteDocument(UUID documentId, String requestingOwnerId) {
+        DocumentEntity doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new DocumentNotFoundException(documentId));
+
+        String owner = (requestingOwnerId != null && !requestingOwnerId.isBlank()) ? requestingOwnerId : "default";
+        boolean isOwner = doc.getOwnerId().equals(owner)
+                || ("default-user".equals(doc.getOwnerId()) && "default".equals(owner))
+                || ("default".equals(doc.getOwnerId()) && "default-user".equals(owner))
+                || "admin".equalsIgnoreCase(owner);
+
+        if (!isOwner) {
+            throw new UnauthorizedDocumentAccessException(documentId, owner);
+        }
+
+        log.info("Executing hard-delete for document: {} (owner: {})", documentId, doc.getOwnerId());
+
+        // 1. Purge MinIO objects under documents/{documentId}/ prefix
+        try {
+            objectStorageService.deletePrefix("documents/" + documentId + "/");
+        } catch (Exception e) {
+            log.warn("Storage purge warning for document {}: {}", documentId, e.getMessage());
+        }
+
+        // 2. Cascade delete database entities
+        List<PageEntity> pages = pageRepository.findByDocumentIdOrderByPageNoAsc(documentId);
+        if (!pages.isEmpty()) {
+            List<UUID> pageIds = pages.stream().map(PageEntity::getId).toList();
+            if (stageTaskRepository != null) {
+                stageTaskRepository.deleteByPageIdIn(pageIds);
+            }
+            pageRepository.deleteByDocumentId(documentId);
+        }
+
+        ocrBatchRepository.deleteByDocumentId(documentId);
+        documentRepository.delete(doc);
+
+        // 3. Terminate and cleanup active SSE streams
+        if (eventService != null) {
+            eventService.closeEmitters(documentId);
+        }
+
+        log.info("Successfully hard-deleted document {} and all derived assets", documentId);
+    }
+
+    /**
+     * Generate a read-and-listen shareable link with configurable expiration (FR11).
+     */
+    @Transactional(readOnly = true)
+    public ShareLinkResponse generateShareLink(UUID documentId, String requestingOwnerId, int expiryHours) {
+        DocumentEntity doc = documentRepository.findById(documentId)
+                .orElseThrow(() -> new DocumentNotFoundException(documentId));
+
+        String owner = (requestingOwnerId != null && !requestingOwnerId.isBlank()) ? requestingOwnerId : "default";
+        boolean isOwner = doc.getOwnerId().equals(owner)
+                || ("default-user".equals(doc.getOwnerId()) && "default".equals(owner))
+                || ("default".equals(doc.getOwnerId()) && "default-user".equals(owner))
+                || "admin".equalsIgnoreCase(owner);
+
+        if (!isOwner) {
+            throw new UnauthorizedDocumentAccessException(documentId, owner);
+        }
+
+        int hours = expiryHours > 0 && expiryHours <= 168 ? expiryHours : 24; // max 7 days, default 24h
+        Instant expiresAt = Instant.now().plus(Duration.ofHours(hours));
+        String rawToken = documentId + ":" + expiresAt.getEpochSecond();
+        String signature = IdempotencyUtils.sha256Hex(rawToken + ":" + doc.getOwnerId());
+        String token = Base64.getUrlEncoder().withoutPadding()
+                .encodeToString((rawToken + ":" + signature.substring(0, 16)).getBytes(StandardCharsets.UTF_8));
+        String shareUrl = "/index.html?docId=" + documentId + "&shareToken=" + token;
+
+        return new ShareLinkResponse(documentId, doc.getTitle(), shareUrl, token, expiresAt);
     }
 
     private void validateUploadFile(MultipartFile file) {
