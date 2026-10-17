@@ -12,6 +12,7 @@
         activeDoc: null,
         currentPageIndex: 0,
         currentAudioTrack: 'en',
+        currentScanView: 'enhanced',
         eventSource: null,
         ownerId: 'default',
         searchDebounceTimer: null,
@@ -36,6 +37,7 @@
         docTitle: document.getElementById('docTitle'),
         docLanguage: document.getElementById('docLanguage'),
         docYear: document.getElementById('docYear'),
+        inputPreprocess: document.getElementById('inputPreprocess'),
         btnSubmitUpload: document.getElementById('btnSubmitUpload'),
         btnSubmitText: document.getElementById('btnSubmitText'),
         uploadSpinner: document.getElementById('uploadSpinner'),
@@ -84,6 +86,9 @@
         btnViewSplit: document.getElementById('btnViewSplit'),
         btnViewScan: document.getElementById('btnViewScan'),
         btnViewText: document.getElementById('btnViewText'),
+        scanSwitchGroup: document.getElementById('scanSwitchGroup'),
+        btnScanEnhanced: document.getElementById('btnScanEnhanced'),
+        btnScanOriginal: document.getElementById('btnScanOriginal'),
         scanPlaceholder: document.getElementById('scanPlaceholder'),
         scannedImage: document.getElementById('scannedImage'),
         origPageMeta: document.getElementById('origPageMeta'),
@@ -265,6 +270,9 @@
             formData.append('ownerId', state.ownerId);
             if (year) {
                 formData.append('year', year);
+            }
+            if (el.inputPreprocess) {
+                formData.append('preprocess', el.inputPreprocess.checked);
             }
 
             setUploadLoading(true);
@@ -566,10 +574,27 @@
         if (page.imageUrl) {
             el.scanPlaceholder.classList.add('hidden');
             el.scannedImage.classList.remove('hidden');
-            el.scannedImage.src = page.imageUrl;
+
+            // Handle Enhanced vs Raw Scan Toggle (FR12)
+            if (page.rawImageUrl) {
+                if (el.scanSwitchGroup) el.scanSwitchGroup.classList.remove('hidden');
+                if (state.currentScanView === 'raw') {
+                    el.scannedImage.src = page.rawImageUrl;
+                    if (el.btnScanOriginal) el.btnScanOriginal.classList.add('active');
+                    if (el.btnScanEnhanced) el.btnScanEnhanced.classList.remove('active');
+                } else {
+                    el.scannedImage.src = page.imageUrl;
+                    if (el.btnScanEnhanced) el.btnScanEnhanced.classList.add('active');
+                    if (el.btnScanOriginal) el.btnScanOriginal.classList.remove('active');
+                }
+            } else {
+                if (el.scanSwitchGroup) el.scanSwitchGroup.classList.add('hidden');
+                el.scannedImage.src = page.imageUrl;
+            }
         } else {
             el.scanPlaceholder.classList.remove('hidden');
             el.scannedImage.classList.add('hidden');
+            if (el.scanSwitchGroup) el.scanSwitchGroup.classList.add('hidden');
         }
 
         // Indic OCR Text
@@ -619,6 +644,20 @@
                 el.splitReader.className = 'split-reader-container ' + cls;
             });
         });
+
+        // Scan View Toggle (Enhanced vs Raw)
+        if (el.btnScanEnhanced) {
+            el.btnScanEnhanced.addEventListener('click', () => {
+                state.currentScanView = 'enhanced';
+                renderCurrentPage();
+            });
+        }
+        if (el.btnScanOriginal) {
+            el.btnScanOriginal.addEventListener('click', () => {
+                state.currentScanView = 'raw';
+                renderCurrentPage();
+            });
+        }
 
         // Event Log Collapsible Toggle
         el.logToggleBtn.addEventListener('click', () => {

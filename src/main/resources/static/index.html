@@ -124,6 +124,17 @@
                                 <input type="number" id="docYear" name="year" placeholder="e.g. 1974" min="1800" max="2030" class="input-control">
                             </div>
                         </div>
+
+                        <div class="form-checkbox-row">
+                            <label class="checkbox-container">
+                                <input type="checkbox" id="inputPreprocess" name="preprocess" checked>
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-label">
+                                    <strong>✨ Enhance Faded Handwriting</strong>
+                                    <span class="checkbox-hint">Auto-contrast, deskew & stroke sharpening (FR12)</span>
+                                </span>
+                            </label>
+                        </div>
                     </div>
 
                     <button type="submit" id="btnSubmitUpload" class="btn btn-primary btn-block">
@@ -394,8 +405,19 @@
                     <!-- Left: Original Scanned Letter Page -->
                     <div class="reader-pane original-pane" id="originalPane">
                         <div class="pane-header">
-                            <span class="pane-badge badge-orig">Original Indic Document</span>
-                            <span class="pane-meta" id="origPageMeta">Page 1</span>
+                            <div class="pane-header-left">
+                                <span class="pane-badge badge-orig">Original Indic Document</span>
+                                <span class="pane-meta" id="origPageMeta">Page 1</span>
+                            </div>
+                            <div class="scan-switch-group" id="scanSwitchGroup">
+                                <button type="button" class="scan-switch-btn active" id="btnScanEnhanced" title="View Enhanced Handwriting Scan">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                                    <span>Enhanced</span>
+                                </button>
+                                <button type="button" class="scan-switch-btn" id="btnScanOriginal" title="View Raw Scanned Image">
+                                    <span>Raw Scan</span>
+                                </button>
+                            </div>
                         </div>
                         <div class="scan-image-wrapper" id="scanImageWrapper">
                             <div class="reader-placeholder" id="scanPlaceholder">
