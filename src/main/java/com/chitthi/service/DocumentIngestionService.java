@@ -48,6 +48,7 @@ public class DocumentIngestionService {
     private final DocumentProgressEventService eventService;
     private final UsageLedgerService usageLedgerService;
     private final StageTaskRepository stageTaskRepository;
+    private final ImagePreprocessingService preprocessingService;
 
     public DocumentIngestionService(DocumentRepository documentRepository,
                                   PageRepository pageRepository,
@@ -59,7 +60,7 @@ public class DocumentIngestionService {
                                   ObjectMapper objectMapper,
                                   DocumentProgressEventService eventService) {
         this(documentRepository, pageRepository, ocrBatchRepository, outboxRepository,
-                objectStorageService, pdfSplitterService, rabbitTemplate, objectMapper, eventService, null, null);
+                objectStorageService, pdfSplitterService, rabbitTemplate, objectMapper, eventService, null, null, null);
     }
 
     public DocumentIngestionService(DocumentRepository documentRepository,
@@ -73,7 +74,7 @@ public class DocumentIngestionService {
                                   DocumentProgressEventService eventService,
                                   UsageLedgerService usageLedgerService) {
         this(documentRepository, pageRepository, ocrBatchRepository, outboxRepository,
-                objectStorageService, pdfSplitterService, rabbitTemplate, objectMapper, eventService, usageLedgerService, null);
+                objectStorageService, pdfSplitterService, rabbitTemplate, objectMapper, eventService, usageLedgerService, null, null);
     }
 
     public DocumentIngestionService(DocumentRepository documentRepository,
@@ -87,6 +88,23 @@ public class DocumentIngestionService {
                                   DocumentProgressEventService eventService,
                                   UsageLedgerService usageLedgerService,
                                   StageTaskRepository stageTaskRepository) {
+        this(documentRepository, pageRepository, ocrBatchRepository, outboxRepository,
+                objectStorageService, pdfSplitterService, rabbitTemplate, objectMapper, eventService,
+                usageLedgerService, stageTaskRepository, null);
+    }
+
+    public DocumentIngestionService(DocumentRepository documentRepository,
+                                  PageRepository pageRepository,
+                                  OcrBatchRepository ocrBatchRepository,
+                                  OutboxRepository outboxRepository,
+                                  ObjectStorageService objectStorageService,
+                                  PdfSplitterService pdfSplitterService,
+                                  RabbitTemplate rabbitTemplate,
+                                  ObjectMapper objectMapper,
+                                  DocumentProgressEventService eventService,
+                                  UsageLedgerService usageLedgerService,
+                                  StageTaskRepository stageTaskRepository,
+                                  ImagePreprocessingService preprocessingService) {
         this.documentRepository = documentRepository;
         this.pageRepository = pageRepository;
         this.ocrBatchRepository = ocrBatchRepository;
@@ -98,6 +116,7 @@ public class DocumentIngestionService {
         this.eventService = eventService;
         this.usageLedgerService = usageLedgerService;
         this.stageTaskRepository = stageTaskRepository;
+        this.preprocessingService = preprocessingService;
     }
 
     @Transactional
@@ -141,19 +160,29 @@ public class DocumentIngestionService {
         List<OcrBatchEntity> batchesToSave = new ArrayList<>();
         Map<UUID, String> batchStorageKeys = new HashMap<>();
 
+        boolean enablePreprocessing = request.preprocess() == null || request.preprocess();
+
         if (isPdf) {
-            PdfSplitterService.SplitResult splitResult = pdfSplitterService.splitPdf(fileBytes);
+            PdfSplitterService.SplitResult splitResult = pdfSplitterService.splitPdf(fileBytes, enablePreprocessing);
 
             // Upload rendered page images
             for (PdfSplitterService.PageImageData pageImage : splitResult.pages()) {
                 String pageImageKey = "documents/" + documentId + "/pages/page_" + pageImage.pageNo() + ".png";
                 objectStorageService.uploadFile(pageImageKey, pageImage.imageBytes(), pageImage.contentType());
 
+                String rawImageKey = null;
+                if (pageImage.rawImageBytes() != null && pageImage.preprocessed()) {
+                    rawImageKey = "documents/" + documentId + "/pages/page_" + pageImage.pageNo() + "_raw.png";
+                    objectStorageService.uploadFile(rawImageKey, pageImage.rawImageBytes(), pageImage.contentType());
+                }
+
                 PageEntity pageEntity = new PageEntity(
                         UUID.randomUUID(),
                         document,
                         pageImage.pageNo(),
                         pageImageKey,
+                        rawImageKey,
+                        pageImage.preprocessed(),
                         "PENDING"
                 );
                 pagesToSave.add(pageEntity);
@@ -177,14 +206,38 @@ public class DocumentIngestionService {
             }
         } else {
             // Single image document
-            String pageImageKey = "documents/" + documentId + "/pages/page_1" + extension;
-            objectStorageService.uploadFile(pageImageKey, fileBytes, file.getContentType());
+            byte[] imageToUpload = fileBytes;
+            byte[] rawImageBytes = fileBytes;
+            boolean preprocessed = false;
+
+            if (enablePreprocessing && preprocessingService != null) {
+                try {
+                    ImagePreprocessingService.PreprocessResult result = preprocessingService.preprocess(fileBytes, file.getContentType());
+                    if (result.imageBytes() != null && result.imageBytes().length > 0) {
+                        imageToUpload = result.imageBytes();
+                        preprocessed = true;
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to pre-process single image upload, falling back to original scan", e);
+                }
+            }
+
+            String pageImageKey = "documents/" + documentId + "/pages/page_1" + (preprocessed ? ".png" : extension);
+            objectStorageService.uploadFile(pageImageKey, imageToUpload, preprocessed ? "image/png" : file.getContentType());
+
+            String rawImageKey = null;
+            if (preprocessed) {
+                rawImageKey = "documents/" + documentId + "/pages/page_1_raw" + extension;
+                objectStorageService.uploadFile(rawImageKey, rawImageBytes, file.getContentType());
+            }
 
             PageEntity pageEntity = new PageEntity(
                     UUID.randomUUID(),
                     document,
                     1,
                     pageImageKey,
+                    rawImageKey,
+                    preprocessed,
                     "PENDING"
             );
             pagesToSave.add(pageEntity);
@@ -256,6 +309,9 @@ public class DocumentIngestionService {
             List<PageEntity> pages = pageRepository.findByDocumentIdOrderByPageNoAsc(documentId);
             List<PageSummaryResponse> pageSummaries = pages.stream().map(p -> {
                 String imageUrl = objectStorageService.generatePresignedUrl(p.getImageKey());
+                String rawImageUrl = p.getRawImageKey() != null
+                        ? objectStorageService.generatePresignedUrl(p.getRawImageKey())
+                        : null;
                 return new PageSummaryResponse(
                         p.getId(),
                         p.getPageNo(),
@@ -263,7 +319,9 @@ public class DocumentIngestionService {
                         Boolean.TRUE.equals(p.getEdited()),
                         p.getOriginalText(),
                         p.getTranslatedText(),
-                        imageUrl
+                        imageUrl,
+                        rawImageUrl,
+                        Boolean.TRUE.equals(p.getPreprocessed())
                 );
             }).toList();
 

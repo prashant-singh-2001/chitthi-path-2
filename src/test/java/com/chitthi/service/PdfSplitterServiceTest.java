@@ -91,4 +91,20 @@ class PdfSplitterServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("exceeding maximum allowed limit of 30");
     }
+
+    @Test
+    void splitPdf_withPreprocessingEnabled_producesRawAndEnhancedImages() throws Exception {
+        ImagePreprocessingService prepService = new ImagePreprocessingService(new com.chitthi.config.PreprocessingProperties());
+        PdfSplitterService serviceWithPrep = new PdfSplitterService(prepService);
+
+        byte[] pdfBytes = createTestPdf(2);
+        PdfSplitterService.SplitResult result = serviceWithPrep.splitPdf(pdfBytes, true);
+
+        assertThat(result.pages()).hasSize(2);
+        for (PdfSplitterService.PageImageData pageImage : result.pages()) {
+            assertThat(pageImage.preprocessed()).isTrue();
+            assertThat(pageImage.rawImageBytes()).isNotEmpty();
+            assertThat(pageImage.imageBytes()).isNotEmpty();
+        }
+    }
 }

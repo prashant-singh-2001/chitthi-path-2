@@ -41,9 +41,10 @@ public class DocumentController {
             @RequestParam(value = "language", defaultValue = "hi") String language,
             @RequestParam(value = "ownerId", required = false) String ownerId,
             @RequestParam(value = "year", required = false) Integer year,
-            @RequestParam(value = "tags", required = false) List<String> tags) throws IOException {
+            @RequestParam(value = "tags", required = false) List<String> tags,
+            @RequestParam(value = "preprocess", required = false, defaultValue = "true") Boolean preprocess) throws IOException {
 
-        DocumentUploadRequest request = new DocumentUploadRequest(title, language, ownerId, year, tags);
+        DocumentUploadRequest request = new DocumentUploadRequest(title, language, ownerId, year, tags, preprocess);
         DocumentUploadResponse response = ingestionService.ingestDocument(file, request);
 
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);

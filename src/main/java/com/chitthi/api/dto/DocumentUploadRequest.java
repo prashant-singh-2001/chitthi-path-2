@@ -14,5 +14,11 @@ public record DocumentUploadRequest(
 
         Integer year,
 
-        List<String> tags
-) {}
+        List<String> tags,
+
+        Boolean preprocess
+) {
+    public DocumentUploadRequest(String title, String language, String ownerId, Integer year, List<String> tags) {
+        this(title, language, ownerId, year, tags, true);
+    }
+}

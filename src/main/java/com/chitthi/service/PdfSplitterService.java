@@ -2,6 +2,11 @@ package com.chitthi.service;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.PDPageContentStream;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
+import org.apache.pdfbox.pdmodel.graphics.image.JPEGFactory;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.slf4j.Logger;
@@ -23,15 +28,40 @@ public class PdfSplitterService {
     public static final int MAX_PAGES_PER_BATCH = 10;
     public static final float PREVIEW_DPI = 150.0f;
 
-    public record PageImageData(int pageNo, byte[] imageBytes, String contentType) {}
+    private final ImagePreprocessingService preprocessingService;
+
+    public record PageImageData(
+            int pageNo,
+            byte[] imageBytes,
+            byte[] rawImageBytes,
+            boolean preprocessed,
+            String contentType
+    ) {
+        public PageImageData(int pageNo, byte[] imageBytes, String contentType) {
+            this(pageNo, imageBytes, null, false, contentType);
+        }
+    }
+
     public record PdfBatchData(int startPage, int endPage, String pageRange, byte[] pdfBytes) {}
     public record SplitResult(int totalPages, List<PageImageData> pages, List<PdfBatchData> batches) {}
 
+    public PdfSplitterService() {
+        this(null);
+    }
+
+    public PdfSplitterService(ImagePreprocessingService preprocessingService) {
+        this.preprocessingService = preprocessingService;
+    }
+
     /**
      * Inspects, validates, and splits a multi-page PDF into batches of <=10 pages
-     * and renders per-page PNG images.
+     * and renders per-page PNG images with optional handwriting pre-processing (FR12).
      */
     public SplitResult splitPdf(byte[] pdfBytes) throws IOException {
+        return splitPdf(pdfBytes, true);
+    }
+
+    public SplitResult splitPdf(byte[] pdfBytes, boolean enablePreprocessing) throws IOException {
         try (PDDocument document = Loader.loadPDF(pdfBytes)) {
             int totalPages = document.getNumberOfPages();
             log.info("Inspecting PDF: total pages = {}", totalPages);
@@ -45,14 +75,24 @@ public class PdfSplitterService {
 
             PDFRenderer renderer = new PDFRenderer(document);
             List<PageImageData> pageImages = new ArrayList<>(totalPages);
+            List<BufferedImage> enhancedImages = new ArrayList<>(totalPages);
 
-            // Render per-page preview images
+            // Render per-page preview images and optionally pre-process
             for (int i = 0; i < totalPages; i++) {
                 int pageNo = i + 1;
-                BufferedImage bufferedImage = renderer.renderImageWithDPI(i, PREVIEW_DPI, ImageType.RGB);
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ImageIO.write(bufferedImage, "PNG", baos);
-                pageImages.add(new PageImageData(pageNo, baos.toByteArray(), "image/png"));
+                BufferedImage rawImage = renderer.renderImageWithDPI(i, PREVIEW_DPI, ImageType.RGB);
+                ByteArrayOutputStream rawBaos = new ByteArrayOutputStream();
+                ImageIO.write(rawImage, "PNG", rawBaos);
+                byte[] rawBytes = rawBaos.toByteArray();
+
+                if (enablePreprocessing && preprocessingService != null) {
+                    ImagePreprocessingService.PreprocessResult result = preprocessingService.preprocess(rawImage);
+                    enhancedImages.add(result.image());
+                    pageImages.add(new PageImageData(pageNo, result.imageBytes(), rawBytes, true, "image/png"));
+                } else {
+                    enhancedImages.add(rawImage);
+                    pageImages.add(new PageImageData(pageNo, rawBytes, rawBytes, false, "image/png"));
+                }
             }
 
             // Partition into batches of <= 10 pages
@@ -62,8 +102,22 @@ public class PdfSplitterService {
                 String pageRange = start + "-" + end;
 
                 try (PDDocument subDoc = new PDDocument()) {
-                    for (int p = start - 1; p < end; p++) {
-                        subDoc.importPage(document.getPage(p));
+                    if (enablePreprocessing && preprocessingService != null) {
+                        // Embed enhanced images for Sarvam Document AI to read cleaned handwriting
+                        for (int p = start - 1; p < end; p++) {
+                            BufferedImage img = enhancedImages.get(p);
+                            PDPage pdPage = new PDPage(new PDRectangle(img.getWidth(), img.getHeight()));
+                            subDoc.addPage(pdPage);
+                            PDImageXObject pdImage = JPEGFactory.createFromImage(subDoc, img, 0.85f);
+                            try (PDPageContentStream contentStream = new PDPageContentStream(subDoc, pdPage)) {
+                                contentStream.drawImage(pdImage, 0, 0, img.getWidth(), img.getHeight());
+                            }
+                        }
+                    } else {
+                        // Import original vector/raster pages
+                        for (int p = start - 1; p < end; p++) {
+                            subDoc.importPage(document.getPage(p));
+                        }
                     }
                     ByteArrayOutputStream subBaos = new ByteArrayOutputStream();
                     subDoc.save(subBaos);
@@ -71,7 +125,8 @@ public class PdfSplitterService {
                 }
             }
 
-            log.info("PDF successfully split into {} pages and {} batches", totalPages, batches.size());
+            log.info("PDF successfully split into {} pages and {} batches (preprocessed={})",
+                    totalPages, batches.size(), enablePreprocessing && preprocessingService != null);
             return new SplitResult(totalPages, pageImages, batches);
         }
     }
