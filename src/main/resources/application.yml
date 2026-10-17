@@ -82,6 +82,12 @@ chitthi:
     enabled: true
     upload-limit-per-minute: 10
     search-limit-per-minute: 60
+  preprocessing:
+    enabled: true
+    auto-contrast: true
+    deskew: true
+    sharpen: true
+    max-skew-angle: 15.0
 
 resilience4j:
   ratelimiter:

@@ -38,6 +38,12 @@ public class PageEntity {
     @Column(name = "text_hash", length = 64)
     private String textHash;
 
+    @Column(name = "raw_image_key", length = 500)
+    private String rawImageKey;
+
+    @Column(nullable = false)
+    private Boolean preprocessed = false;
+
     @Column(nullable = false)
     private Boolean edited = false;
 
@@ -52,10 +58,16 @@ public class PageEntity {
     public PageEntity() {}
 
     public PageEntity(UUID id, DocumentEntity document, Integer pageNo, String imageKey, String status) {
+        this(id, document, pageNo, imageKey, null, false, status);
+    }
+
+    public PageEntity(UUID id, DocumentEntity document, Integer pageNo, String imageKey, String rawImageKey, Boolean preprocessed, String status) {
         this.id = id;
         this.document = document;
         this.pageNo = pageNo;
         this.imageKey = imageKey;
+        this.rawImageKey = rawImageKey;
+        this.preprocessed = preprocessed != null ? preprocessed : false;
         this.status = status;
         this.edited = false;
     }
@@ -86,6 +98,12 @@ public class PageEntity {
 
     public Boolean getEdited() { return edited; }
     public void setEdited(Boolean edited) { this.edited = edited; }
+
+    public String getRawImageKey() { return rawImageKey; }
+    public void setRawImageKey(String rawImageKey) { this.rawImageKey = rawImageKey; }
+
+    public Boolean getPreprocessed() { return preprocessed; }
+    public void setPreprocessed(Boolean preprocessed) { this.preprocessed = preprocessed; }
 
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
