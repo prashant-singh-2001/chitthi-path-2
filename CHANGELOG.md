@@ -10,6 +10,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Production Multi-Stage Dockerfile & Full-Stack Compose Deployment:**
+  - Multi-stage hardened `Dockerfile` with Spring Boot 3.4.3 layered extraction:
+    - Stage 1 (`builder`): `eclipse-temurin:21-jdk-alpine`, Maven offline dependency pre-caching, and `java -Djarmode=tools -jar target/*.jar extract --layers --destination extracted`.
+    - Stage 2 (`runtime`): Minimal `eclipse-temurin:21-jre-alpine` running as unprivileged non-root user `chitthi:chitthi` (UID/GID 1001) for security hardening.
+    - Layer-cached assembly: `dependencies/`, `spring-boot-loader/`, `snapshot-dependencies/`, `application/` copied in order of change frequency.
+    - Low-latency JVM configuration: Java 21 Generational ZGC (`-XX:+UseZGC -XX:+ZGenerational`), 75% container memory targeting, and virtual thread concurrency.
+    - Built-in container healthcheck via `/actuator/health`.
+  - Lean `.dockerignore` filtering git history, target build dirs, IDE configs, agent state, and docs to keep Docker build context under 5MB.
+  - Production `docker-compose.yml` orchestrating the full 4-service platform:
+    - Containerized `chitthi-app` service mapped to port 8080.
+    - Ordered startup dependencies: `postgres` (service healthy), `rabbitmq` (service healthy), and `createbuckets` (service completed successfully).
+    - Bridge network communication using internal DNS names (`postgres:5432`, `rabbitmq:5672`, `minio:9000`), preserving host port mappings for local developer hybrid workflow.
+  - Configuration template `.env.example` documenting all ports, credentials, and `SARVAM_API_KEY`.
 - **Handwriting Image Pre-processing Pipeline (`FR12`):**
   - Pure Java `ImagePreprocessingService` implementing projection profile variance maximization for dominant angle skew detection ($-15^\circ$ to $+15^\circ$) and bilinear affine rotation.
   - Luminance histogram percentile clipping (1st/99th percentiles) for auto-contrast stretching, deepening faint ink strokes while brightening aged/yellowed paper backgrounds.

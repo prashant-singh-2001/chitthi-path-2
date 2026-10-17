@@ -98,29 +98,48 @@ stateDiagram-v2
 ## 🚀 Quickstart
 
 ### Prerequisites
-* **Java 21+**
-* **Docker & Docker Compose**
-* **Maven 3.9+**
+* **Docker & Docker Compose** (for containerized deployment)
+* **Java 21+ & Maven 3.9+** (only if building and running locally on host)
 
 ### 1. Clone & Configure
 ```bash
 git clone https://github.com/prashant-singh-2001/chitthi-path-2.git
 cd chitthi-path-2
+cp .env.example .env
 ```
 
-Configure your Sarvam API subscription key:
+Edit `.env` (or set environment variables) to supply your Sarvam AI key:
 ```bash
-# On Linux/macOS:
-export SARVAM_API_KEY="your-sarvam-api-key"
-
-# On Windows (PowerShell):
-$env:SARVAM_API_KEY="your-sarvam-api-key"
+SARVAM_API_KEY="your-sarvam-api-key"
 ```
 
-### 2. Start Backing Services
-Launch PostgreSQL, RabbitMQ, and MinIO with a single command:
+---
+
+### Option A: Full-Stack Docker Deployment (Single Command)
+
+Spin up the entire platform — PostgreSQL 16, RabbitMQ 3.13, MinIO S3 storage with auto-created buckets, and the Spring Boot 3.4 hardened container:
+
 ```bash
-docker compose up -d
+docker compose up --build
+```
+
+The services will initialize in dependency order with automated health checks:
+1. `chitthi-postgres` (healthy on port 5433)
+2. `chitthi-rabbitmq` (healthy on port 5673, UI on 15673)
+3. `chitthi-minio` & `chitthi-minio-init` (healthy on port 9100, console on 9101, bucket `chitthi-documents` verified)
+4. `chitthi-app` (hardened non-root Java 21 container with Generational ZGC, healthy on port 8080)
+
+Once booted, open `http://localhost:8080` in your browser.
+
+---
+
+### Option B: Local Developer Workflow (Host Java + Docker Backing Services)
+
+If you are developing or running unit/contract tests locally:
+
+#### 1. Start Backing Infrastructure Only
+```bash
+docker compose up -d postgres rabbitmq minio createbuckets
 ```
 
 | Service | Host Port | Management Console / Endpoint | Credentials |
@@ -129,14 +148,20 @@ docker compose up -d
 | **RabbitMQ 3.13** | `5673` (AMQP), `15673` (UI) | `http://localhost:15673` | `chitthi` / `chitthi` |
 | **MinIO Storage** | `9100` (API), `9101` (UI) | `http://localhost:9101` | `minioadmin` / `minioadmin` |
 
-### 3. Run Automated Tests
-Execute the full test suite (including WireMock contract tests and Testcontainers integration tests):
+#### 2. Run Full Automated Test Suite (89 Tests)
+Execute all WireMock contract tests, image processing tests, and containerized PostgreSQL tests:
 ```bash
 mvn clean test
 ```
 
-### 4. Run the Application
+#### 3. Launch Spring Boot Application
 ```bash
+# On Linux/macOS:
+export SARVAM_API_KEY="your-sarvam-api-key"
+mvn spring-boot:run
+
+# On Windows (PowerShell):
+$env:SARVAM_API_KEY="your-sarvam-api-key"
 mvn spring-boot:run
 ```
 The API server will start on `http://localhost:8080`.
