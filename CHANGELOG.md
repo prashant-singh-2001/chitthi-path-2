@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Automated Docker Image Build & Trivy Vulnerability Scan CI (`.github/workflows/ci.yml`):**
+  - Added `docker` job in GitHub Actions executing after the Java test suite (`needs: build`).
+  - Automated `docker compose config` validation to prevent syntax or service schema drifts.
+  - Multi-platform Docker Buildx setup (`docker/setup-buildx-action@v3`) with GitHub Actions cache backend (`type=gha,mode=max`).
+  - Container build via `docker/build-push-action@v6` with `--load` into local runner daemon.
+  - Comprehensive container vulnerability scanning with official `aquasecurity/trivy-action@v0.36.0` scanning OS packages and application dependencies for `CRITICAL` and `HIGH` vulnerabilities.
+  - Dual output reporting: human-readable console summary table in CI job logs, plus SARIF report upload to GitHub Security Code Scanning tab (`github/codeql-action/upload-sarif@v3`).
 - **Production Multi-Stage Dockerfile & Full-Stack Compose Deployment:**
   - Multi-stage hardened `Dockerfile` with Spring Boot 3.4.3 layered extraction:
     - Stage 1 (`builder`): `eclipse-temurin:21-jdk-alpine`, Maven offline dependency pre-caching, and `java -Djarmode=tools -jar target/*.jar extract --layers --destination extracted`.
