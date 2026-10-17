@@ -4,15 +4,15 @@ services:
     container_name: chitthi-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: chitthi
-      POSTGRES_USER: chitthi
-      POSTGRES_PASSWORD: chitthi
+      POSTGRES_DB: ${POSTGRES_DB:-chitthi}
+      POSTGRES_USER: ${POSTGRES_USER:-chitthi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chitthi}
     ports:
-      - "5433:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chitthi -d chitthi"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chitthi} -d ${POSTGRES_DB:-chitthi}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -22,12 +22,12 @@ services:
     container_name: chitthi-rabbitmq
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: chitthi
-      RABBITMQ_DEFAULT_PASS: chitthi
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-chitthi}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-chitthi}
       RABBITMQ_ERLANG_COOKIE: "CHITTHI_COOKIE_SECRET_2026"
     ports:
-      - "5673:5672"
-      - "15673:15672"
+      - "${RABBITMQ_PORT:-5673}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15673}:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -40,11 +40,11 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minioadmin}
     ports:
-      - "9100:9000"
-      - "9101:9001"
+      - "${MINIO_API_PORT:-9100}:9000"
+      - "${MINIO_CONSOLE_PORT:-9101}:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -61,10 +61,46 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
-      /usr/bin/mc mb --ignore-existing myminio/chitthi-documents;
+      /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_USER:-minioadmin} ${MINIO_PASSWORD:-minioadmin};
+      /usr/bin/mc mb --ignore-existing myminio/${S3_BUCKET:-chitthi-documents};
       exit 0;
       "
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chitthi-backend:latest
+    container_name: chitthi-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-chitthi}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-chitthi}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-chitthi}
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-chitthi}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-chitthi}
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_PASSWORD:-minioadmin}
+      S3_BUCKET: ${S3_BUCKET:-chitthi-documents}
+      SARVAM_API_KEY: ${SARVAM_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      createbuckets:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
 
 volumes:
   postgres_data:

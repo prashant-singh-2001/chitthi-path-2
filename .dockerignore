@@ -1,0 +1,25 @@
+# Git and IDE files
+.git
+.gitignore
+.github
+.idea
+.vscode
+*.iml
+
+# Build artifacts
+target/
+build/
+*.log
+
+# Antigravity and Agent context
+.agents/
+brain/
+scratch/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Markdown docs
+*.md
