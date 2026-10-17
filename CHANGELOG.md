@@ -10,6 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Handwriting Image Pre-processing Pipeline (`FR12`):**
+  - Pure Java `ImagePreprocessingService` implementing projection profile variance maximization for dominant angle skew detection ($-15^\circ$ to $+15^\circ$) and bilinear affine rotation.
+  - Luminance histogram percentile clipping (1st/99th percentiles) for auto-contrast stretching, deepening faint ink strokes while brightening aged/yellowed paper backgrounds.
+  - Unsharp mask stroke convolution to crispen cursive ligatures and Devanagari vowel diacritics for Sarvam Document AI Vision 1.5.
+  - PDFBox splitting pipeline compiles enhanced page images into batch sub-PDFs for Sarvam OCR, maximizing handwriting transcription fidelity.
+  - Dual storage: stores both enhanced image (`page_{n}.png`) and raw scan (`page_{n}_raw.png`) in MinIO with Flyway migration `V2__add_preprocessing_columns.sql`.
+  - Web Reader Scan Switcher: Interactive `[✨ Enhanced]` vs `[Raw Scan]` toggle button group with live crossfade, plus ingestion form enhancement checkbox.
 - **Owner-Scoped Cascading Hard Delete (`FR14`, `DELETE /api/documents/{id}`):** Permanent deletion of documents and child entities (`page`, `ocr_batch`, `stage_task`) with authorization checking (`403 Forbidden` for non-owners, `404 Not Found` for nonexistent). Historical spend ledger (`api_call`) is retained via PostgreSQL `ON DELETE SET NULL`.
 - **MinIO Object Prefix Cleanup:** Complete object storage purge of `documents/{documentId}/*` (scanned PDF/images, rendered page PNGs, per-page audio WAVs, stitched audio WAVs, OCR zip outputs), while preserving deduplicated generic TTS audio cache (`cache/tts/{textHash}.wav`).
 - **Immediate Event Stream Termination:** Active Server-Sent Event (SSE) emitters for the deleted document are instantly terminated (`closeEmitters`).

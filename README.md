@@ -36,7 +36,7 @@ Many families hold boxes of old letters, personal diaries, and ancestral records
 * **Sub-300ms Search:** Full-text search across translated English (`tsvector`) and fuzzy substring search across original Indic scripts via PostgreSQL trigrams (`pg_trgm`).
 * **Zero Duplicate Paid Calls:** Deterministic idempotency keys `hash(doc_id, page_no, stage, content_hash)` prevent duplicate billable API invocations upon retries.
 * **Selective Invalidation on Edit:** Editing page transcription re-runs translation and audio synthesis *only* for that page, keeping regeneration cost-effective.
-* **Ledger & Cost Tracking:** Every third-party API call records consumed units (characters/pages), latency, and estimated cost in INR with a strict 7,000-word daily ceiling.
+* **Handwriting Pre-processing (FR12):** Pure Java projection-profile deskewing ($-15^\circ$ to $+15^\circ$), luminance histogram auto-contrast stretching, and unsharp mask stroke sharpening to maximize OCR accuracy on faded heritage letters.
 * **Cascading Hard Delete & MinIO Purge:** Permanent, owner-authorized deletion (`DELETE /api/documents/{id}`) that purges all database entities and MinIO S3 object prefixes (`documents/{id}/*`) while terminating active SSE emitters.
 * **Per-IP Rate Limiting:** High-throughput sliding token bucket filter protecting ingestion (10 req/min) and search (60 req/min) returning HTTP 429 with `Retry-After`.
 * **Shareable Read-and-Listen Links:** Generates ephemeral access tokens and clean direct links (`?docId=...`) for sharing digitized letters.
@@ -176,10 +176,11 @@ Chitthi includes built-in safeguards to protect against quota exhaustion and une
 
 ## 🧪 Testing Strategy
 
-The test suite comprises **83 comprehensive automated tests** across all architectural layers:
+The test suite comprises **89 comprehensive automated tests** across all architectural layers:
 
 * **Zero-Credit Contract Testing:** [`SarvamClientWireMockTest`](src/test/java/com/chitthi/client/sarvam/SarvamClientWireMockTest.java) uses dynamic port WireMock to validate payload structures, headers (`api-subscription-key`), and response handling without calling real APIs.
 * **Containerized DB Testing:** [`ChitthiApplicationTests`](src/test/java/com/chitthi/ChitthiApplicationTests.java) uses Spring Boot 3 `@ServiceConnection` and Testcontainers PostgreSQL to verify Flyway migrations and `pg_trgm` extension initialization.
+* **Handwriting Pre-processing:** [`ImagePreprocessingServiceTest`](src/test/java/com/chitthi/service/ImagePreprocessingServiceTest.java) and [`PdfSplitterServiceTest`](src/test/java/com/chitthi/service/PdfSplitterServiceTest.java) validate synthetic rotation deskewing, dynamic range expansion, and stroke edge sharpening.
 * **Hard Delete & Storage Purge:** [`DocumentHardDeleteTest`](src/test/java/com/chitthi/service/DocumentHardDeleteTest.java) and [`ObjectStorageServiceTest`](src/test/java/com/chitthi/storage/ObjectStorageServiceTest.java) verify S3 prefix purging, cascading entity deletion, and emitter termination.
 * **Rate Limiting Tests:** [`RateLimitingFilterTest`](src/test/java/com/chitthi/config/RateLimitingFilterTest.java) validates IP token exhaustion, HTTP 429 headers, and IP address extraction (`X-Forwarded-For`).
 * **Web & Ingestion Tests:** Comprehensive Spring MVC slice tests covering search, edit flow, retry mechanics, and SSE emitter lifecycles.
